@@ -7,8 +7,13 @@ import glob
 
 def main(start_n):
     top_dir = '/gf2/eodg/SRP001_PROUD_TURBREP/GO_AROUNDS/VABB/'
+    # indir stores the opensky data
     indir = top_dir + 'INDATA/'
+
+    # odir_nm stores plots for normal landings
     odir_nm = top_dir + 'OUT_PLOT/NORM/'
+
+    # odir_ga stores plots for detected go-arounds
     odir_ga = top_dir + 'OUT_PLOT/PSGA/'
 
     files = glob.glob(indir+'*.pkl')
@@ -65,4 +70,8 @@ def main(start_n):
             t_res = p.get()
 
 
-main(5116)
+# Use this to start processing from a given file number.
+# Can be helpful if processing fails at some point.
+init_num = 0
+
+main(init_num)
