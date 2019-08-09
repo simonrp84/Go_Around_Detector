@@ -6,6 +6,13 @@ import glob
 
 
 def main(start_n):
+
+    # Total number of aircraft seen
+    tot_n_ac = 0
+
+    # Of which go-arounds
+    tot_n_ga = 0
+
     top_dir = '/gf2/eodg/SRP001_PROUD_TURBREP/GO_AROUNDS/VABB/'
     # indir stores the opensky data
     indir = top_dir + 'INDATA/'
@@ -16,7 +23,8 @@ def main(start_n):
     # odir_ga stores plots for detected go-arounds
     odir_ga = top_dir + 'OUT_PLOT/PSGA/'
 
-    files = glob.glob(indir+'*.pkl')
+    files = glob.glob(indir+'*201906*.pkl')
+    files = files + glob.glob(indir+'*201907*.pkl')
     files.sort()
 
     fli_len = len(files)
@@ -48,6 +56,8 @@ def main(start_n):
             t_res = p.get()
             for fli in t_res:
                 f_data.append(fli)
+        if(len(f_data) < 1):
+            continue
         traf_arr = Traffic.from_flights(f_data)
 
         p_list = []
@@ -68,6 +78,12 @@ def main(start_n):
 
         for p in p_list:
             t_res = p.get()
+            if (t_res != -1):
+                tot_n_ac += 1
+                if (t_res):
+                    tot_n_ga += 1
+        print("\t-\tHave processed " + str(tot_n_ac) +
+              " aircraft. Have seen " + str(tot_n_ga) + " go-arounds.")
 
 
 # Use this to start processing from a given file number.
