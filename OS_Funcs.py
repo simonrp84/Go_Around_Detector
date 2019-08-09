@@ -1,6 +1,8 @@
 from scipy.interpolate import UnivariateSpline as UniSpl
 from matplotlib.lines import Line2D
 from traffic.core import Traffic
+from datetime import timedelta
+
 import matplotlib.pyplot as plt
 import flightphase as flph
 import OS_Consts as CNS
@@ -22,6 +24,14 @@ def get_flight(inf):
 #    except:
 #        return flist
     for flight in fdata:
+        f_data = flight.data
+        f_data = f_data.drop_duplicates('timestamp')
+        f_data = f_data.drop_duplicates('track')
+        f_data = f_data.drop_duplicates('longitude')
+        f_data = f_data.drop_duplicates('latitude')
+        f_data = f_data.query('altitude<10000')
+        f_data = f_data.dropna()
+        flight.data = f_data
         flist.append(flight)
     return flist
 
@@ -73,12 +83,13 @@ def get_future_time(times, c_pos, n_sec):
     return idx
 
 
-def check_ga(fd, labels):
+def check_ga(fd, labels, verbose):
     '''
     Check if a go-around occurred based on some simple tests
     Inputs:
         -   A dict containing flight data
         -   The flight classification labels
+        -   A boolean for verbose mode. If True, a g/a warning is printed
     Returns:
         -   True if a go-around is likely to have occured
         -   False otherwise
@@ -90,12 +101,12 @@ def check_ga(fd, labels):
     for i in range(1, lblen):
         if (labels[i] != labels[i-1]):
             cng[i] = True
-    pts = (cng).nonzero()
+    main_pts = (cng).nonzero()
     if (np.all(cng == False)):
         return ga_flag
-    if (len(pts[0]) > 0):
-        pts = pts[0]
-    for pt in pts:
+    if (len(main_pts[0]) > 0):
+        main_pts = main_pts[0]
+    for pt in main_pts:
         # First check altitude of state change. G/A will be low alt
         if (fd['gals'][pt] > CNS.ga_st_alt_t):
             continue
@@ -110,8 +121,12 @@ def check_ga(fd, labels):
         # bad data on landing
         t_pos = get_future_time(fd['time'], pt, CNS.ga_tcheck)
         if (t_pos < 0):
-            alt_sub = fd['gals'][pt:len(fd['gals'])]
-            vrt_sub = fd['rocs'][pt:len(fd['rocs'])]
+            lenner = len(fd['gals'])
+            r_time = np.nanmean(fd['time'][pt:lenner])
+            if (r_time > fd['time'][pt] + (CNS.ga_tcheck * 2.)):
+                continue
+            alt_sub = fd['gals'][pt:lenner]
+            vrt_sub = fd['rocs'][pt:lenner]
             n_pos = len(fd['gals']) - pt
         else:
             alt_sub = fd['gals'][pt:t_pos]
@@ -139,6 +154,12 @@ def check_ga(fd, labels):
         vrts_p = (n_pts_vrt/n_pos)*100.
 
         if (n_pos > 10 and alts_p > 50 and vrts_p > 20):
+            if (verbose):
+                ga_time = fd['strt'] + timedelta(seconds=int(fd['time'][pt]))
+                print("\t-\tG/A warning:",
+                      fd['call'],
+                      fd['ic24'],
+                      ga_time.strftime("%Y-%m-%d %H:%M"))
             ga_flag = True
 
     return ga_flag
@@ -164,7 +185,7 @@ def proc_fl(flight, odir_norm, odir_goar, colormap, verbose):
         return -1
     if (verbose):
         print("\t-\tProcessing:", flight.callsign)
-    flight = flight.resample("1s")
+#    flight = flight.resample("1s")
     fd = preproc_data(flight)
     if (fd is None):
         if (verbose):
@@ -179,11 +200,8 @@ def proc_fl(flight, odir_norm, odir_goar, colormap, verbose):
             print("\t-\tNo state change:", flight.callsign)
         return -1
 
-    ga_flag = check_ga(fd, labels)
+    ga_flag = check_ga(fd, labels, True)
     if (ga_flag):
-#        if (verbose):
-        print("\t-\tG/A warning:",
-              fd['call'], fd['ic24'], fd['stop'], fd['dura'])
         odir = odir_goar
     else:
         odir = odir_norm
@@ -280,12 +298,12 @@ def preproc_data(flight):
         f_data = f_data.drop_duplicates('last_position')
     except KeyError:
         None
-    f_data = f_data.drop_duplicates('timestamp')
-    f_data = f_data.drop_duplicates('track')
-    f_data = f_data.drop_duplicates('longitude')
-    f_data = f_data.drop_duplicates('latitude')
-    f_data = f_data.query('altitude<10000')
-    f_data = f_data.dropna()
+#    f_data = f_data.drop_duplicates('timestamp')
+#    f_data = f_data.drop_duplicates('track')
+#    f_data = f_data.drop_duplicates('longitude')
+#    f_data = f_data.drop_duplicates('latitude')
+#    f_data = f_data.query('altitude<10000')
+#    f_data = f_data.dropna()
 
     if(len(f_data) < 5):
         return None
