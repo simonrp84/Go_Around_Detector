@@ -18,10 +18,18 @@ def main(start_n):
     indir = top_dir + 'INDATA/'
 
     # odir_nm stores plots for normal landings
-    odir_nm = top_dir + 'OUT_PLOT/NORM/'
+    odir_pl_nm = top_dir + 'OUT_PLOT/NORM/'
 
     # odir_ga stores plots for detected go-arounds
-    odir_ga = top_dir + 'OUT_PLOT/PSGA/'
+    odir_pl_ga = top_dir + 'OUT_PLOT/PSGA/'
+
+    # odir_nm stores plots for normal landings
+    odir_da_nm = top_dir + 'OUT_DATA/NORM/'
+
+    # odir_ga stores plots for detected go-arounds
+    odir_da_ga = top_dir + 'OUT_DATA/PSGA/'
+
+    odirs = [odir_pl_nm, odir_pl_ga, odir_da_nm, odir_da_ga]
 
     files = glob.glob(indir+'*.pkl')
     files.sort()
@@ -67,8 +75,7 @@ def main(start_n):
         for flight in traf_arr:
             if (flight.stop + timedelta(minutes=5) < end_time):
                 p_list.append(pool.apply_async(OSF.proc_fl, args=(flight,
-                                                                  odir_nm,
-                                                                  odir_ga,
+                                                                  odirs,
                                                                   colormap,
                                                                   False,)))
             else:

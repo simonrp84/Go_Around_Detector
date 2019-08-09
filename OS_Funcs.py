@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import flightphase as flph
 import OS_Consts as CNS
 import numpy as np
-
+import os
 
 def get_flight(inf):
     '''
@@ -165,14 +165,17 @@ def check_ga(fd, labels, verbose):
     return ga_flag
 
 
-def proc_fl(flight, odir_norm, odir_goar, colormap, verbose):
+def proc_fl(flight, odirs, colormap, verbose):
     '''
     The main processing routine, filters, assigns phases and determines
     go-around status for a given flight.
     Inputs:
         -   A 'traffic' flight object
-        -   A string specifying the output directory in which to save figures
-            for normal (non-go-around) flights
+        -   A 4-element list specifying various output directories:
+            -   normal plot output
+            -   go-around plot output
+            -   normal numpy data output
+            -   go-around numpy data output
         -   A string specifying the output directory in which to save figures
             for flights designated as possible go-arounds
     Returns:
@@ -201,13 +204,16 @@ def proc_fl(flight, odir_norm, odir_goar, colormap, verbose):
         return -1
 
     ga_flag = check_ga(fd, labels, True)
-    if (ga_flag):
-        odir = odir_goar
-    else:
-        odir = odir_norm
-
     spldict = create_spline(fd)
-    do_plots(fd, spldict, labels, colormap, odir)
+    if (ga_flag):
+        odir_pl = odirs[1]
+        odir_np = odirs[3]
+    else:
+        odir_pl = odirs[0]
+        odir_np = odirs[2]
+
+    do_plots(fd, spldict, labels, colormap, odir_pl)
+    to_numpy(fd, odir_np)
     if (verbose):
         print("\t-\tDONE")
     return ga_flag
@@ -373,7 +379,7 @@ def do_labels(fd):
     return labels
 
 
-def do_plots(fd, spld, labels, cmap, odir, odpi=300):
+def do_plots(fd, spld, labels, cmap, outdir, odpi=300):
     '''
     Inputs:
         -   A dict of flight data, such as that returned by preproc_data()
@@ -416,10 +422,43 @@ def do_plots(fd, spld, labels, cmap, odir, odpi=300):
                mode="expand", borderaxespad=0.)
 
     plt.tight_layout()
+    
+    odir = outdir + fd['stop'].strftime("%Y%m%d") + '/'
+    if (not os.path.exists(odir)):
+        try:
+            os.mkdir(odir)
+        except:
+            None
+
     timestr = fd['stop'].strftime("%Y%m%d%H%M")
-    plt.savefig(odir + fd['call'] + '_' + timestr + '_STATE.png',
+    outf = odir + 'FLT_' + fd['ic24'] + '_'
+    outf = outf + fd['call'] + '_'
+    outf = outf + timestr + '.png'
+    plt.savefig(outf,
                 figsize=fs,
                 dpi=odpi,
                 bbox_inches='tight',
                 pad_inches=0)
     plt.close()
+
+
+def to_numpy(fd, outdir):
+    '''
+    Save data for a single flight into a numpy pickle file.
+    Files are saved in a YYYYMMDD subdirectory.
+    Inputs:
+        -   fd: Dict containing flight info
+        -   outdir: Location to store output
+    Returns:
+        -   Nothing
+    '''
+    odir = outdir + fd['stop'].strftime("%Y%m%d") + '/'
+    if (not os.path.exists(odir)):
+        try:
+            os.mkdir(odir)
+        except:
+            None
+    outf = odir + 'FLT_' + fd['ic24'] + '_'
+    outf = outf + fd['call'] + '_'
+    outf = outf + fd['stop'].strftime("%Y%m%d%H%m") + '.pkl'
+    np.save(outf, fd)
