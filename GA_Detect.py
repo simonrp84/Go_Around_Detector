@@ -23,8 +23,7 @@ def main(start_n):
     # odir_ga stores plots for detected go-arounds
     odir_ga = top_dir + 'OUT_PLOT/PSGA/'
 
-    files = glob.glob(indir+'*201906*.pkl')
-    files = files + glob.glob(indir+'*201907*.pkl')
+    files = glob.glob(indir+'*.pkl')
     files.sort()
 
     fli_len = len(files)
@@ -59,7 +58,6 @@ def main(start_n):
         if(len(f_data) < 1):
             continue
         traf_arr = Traffic.from_flights(f_data)
-
         p_list = []
         f_data = []
 
