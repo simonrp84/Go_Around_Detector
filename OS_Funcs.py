@@ -45,8 +45,8 @@ def check_takeoff(df):
     if (np.nanmean(alt_sub) < 3000):
         if (np.nanmean(alt_sub[0:2]) < np.nanmean(alt_sub[2:5])):
             return True
-    if (np.nanmean(df['rocs'] > 200)):
-        return True
+#    if (np.nanmean(df['rocs'] > 200)):
+#        return True
 
     return False
 
@@ -160,30 +160,30 @@ def proc_fl(flight, odir_norm, odir_goar, colormap, verbose):
     gd_fl = check_good_flight(flight)
     if (not gd_fl):
         if (verbose):
-            print("\t\t-\tBad flight call:", flight.callsign)
-        return False
+            print("\t-\tBad flight call:", flight.callsign)
+        return -1
     if (verbose):
         print("\t-\tProcessing:", flight.callsign)
     flight = flight.resample("1s")
     fd = preproc_data(flight)
     if (fd is None):
         if (verbose):
-            print("\t\t-\tBad flight data:", flight.callsign)
-        return False
+            print("\t-\tBad flight data:", flight.callsign)
+        return -1
     takeoff = check_takeoff(fd)
     if (takeoff == True):
-        return False
+        return -1
     labels = do_labels(fd)
     if (np.all(labels == labels[0])):
         if (verbose):
-            print("\t\t-\tNo state change:", flight.callsign)
-        return False
+            print("\t-\tNo state change:", flight.callsign)
+        return -1
 
     ga_flag = check_ga(fd, labels)
     if (ga_flag):
-        if (verbose):
-            print("\t\t-\tG/A warning:",
-                  fd['call'], fd['ic24'], fd['stop'], fd['dura'])
+#        if (verbose):
+        print("\t-\tG/A warning:",
+              fd['call'], fd['ic24'], fd['stop'], fd['dura'])
         odir = odir_goar
     else:
         odir = odir_norm
@@ -192,7 +192,7 @@ def proc_fl(flight, odir_norm, odir_goar, colormap, verbose):
     do_plots(fd, spldict, labels, colormap, odir)
     if (verbose):
         print("\t-\tDONE")
-    return True
+    return ga_flag
 
 
 def check_good_flight(flight):
