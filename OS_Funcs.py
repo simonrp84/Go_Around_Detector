@@ -24,6 +24,9 @@ def get_flight(inf):
 #    except:
 #        return flist
     for flight in fdata:
+#        pos = flight.callsign.find(CNS.search_call)
+#        if (pos < 0):
+#            continue
         f_data = flight.data
         f_data = f_data.drop_duplicates('timestamp')
         f_data = f_data.drop_duplicates('track')
@@ -49,13 +52,17 @@ def check_takeoff(df):
     if (lf < 10):
         return True
     # Check if the first datapoints are all low alt
+    # Two options here: geo alt or baro alt.
+    # Geo often has false data
+    # Baro can be troublesome as it depends on weather
     alt_sub = df['gals'][0:5]
+    alt_sub2 = df['alts'][0:5]
     if (np.all(alt_sub < CNS.takeoff_thresh_alt)):
         return True
     if (np.nanmean(alt_sub) < 3000):
-        if (np.nanmean(alt_sub[0:2]) < np.nanmean(alt_sub[2:5])):
+        if (np.nanmean(alt_sub2[0:2]) < np.nanmean(alt_sub2[2:5])):
             return True
-#    if (np.nanmean(df['rocs'] > 200)):
+#    if (np.nanmean(df['rocs'][0:5] > 1000)):
 #        return True
 
     return False
@@ -230,6 +237,8 @@ def check_good_flight(flight):
         -   False if callsign matches one of the 'bad' list
         -   True if flight is not matched
     '''
+    if (flight.icao24 in CNS.exclude_list):
+        return False
     if (flight.callsign[0:7] == 'WILDLIF'):
         return False
     elif (flight.callsign[0:6] == 'AGM000'):

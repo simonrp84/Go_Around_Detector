@@ -15,7 +15,7 @@ ga_tcheck = 120.
 
 
 # Takeoff threshold
-takeoff_thresh_alt = 400.
+takeoff_thresh_alt = 600.
 
 
 # The threshold altitude for the state change, if change occurs above
@@ -26,3 +26,7 @@ ga_st_alt_t = 500.
 # This is a list of icao24 addresses to exclude, for example general
 # aviation aircraft or helicopters.
 exclude_list = ['800b7b', '800b7c', '800b7d', '800d5f', ]
+
+
+# This variable allows you to select a single callsign to process
+search_call = 'IGO366'
