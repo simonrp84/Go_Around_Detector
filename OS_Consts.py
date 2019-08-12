@@ -21,3 +21,8 @@ takeoff_thresh_alt = 400.
 # The threshold altitude for the state change, if change occurs above
 # this altitude then it's probably not a go-around
 ga_st_alt_t = 500.
+
+
+# This is a list of icao24 addresses to exclude, for example general
+# aviation aircraft or helicopters.
+exclude_list = ['800b7b', '800b7c', '800b7d', '800d5f', ]
