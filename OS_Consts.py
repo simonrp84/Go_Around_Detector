@@ -29,4 +29,4 @@ exclude_list = ['800b7b', '800b7c', '800b7d', '800d5f', ]
 
 
 # This variable allows you to select a single callsign to process
-search_call = 'IGO366'
+search_call = ''
