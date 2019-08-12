@@ -24,9 +24,9 @@ def get_flight(inf):
 #    except:
 #        return flist
     for flight in fdata:
-#        pos = flight.callsign.find(CNS.search_call)
-#        if (pos < 0):
-#            continue
+        pos = flight.callsign.find(CNS.search_call)
+        if (pos < 0):
+            continue
         f_data = flight.data
         f_data = f_data.drop_duplicates('timestamp')
         f_data = f_data.drop_duplicates('track')
