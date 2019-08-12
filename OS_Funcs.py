@@ -1,13 +1,62 @@
 from scipy.interpolate import UnivariateSpline as UniSpl
-from matplotlib.lines import Line2D
 from traffic.core import Traffic
 from datetime import timedelta
 
-import matplotlib.pyplot as plt
 import flightphase as flph
+import OS_Output as OSO
 import OS_Consts as CNS
 import numpy as np
 import os
+
+
+def estimate_rwy(df, rwy_list):
+    '''
+    Guesses which runway a flight is attempting to land on
+    Inputs:
+        -   df, a dict containing flight information
+        -   rwy_list, a list of runways to check, defined in OS_Airports
+    Returns:
+        -   A runway class from the list.
+    '''
+
+    b_dist = 999.
+    b_rwy = None
+    b_pos = -1.
+    
+    for rwy in rwy_list:
+        dists2 = np.sqrt((df['lats'] - rwy.gate[0]) *
+                         (df['lats'] - rwy.gate[0]) +
+                         (df['lons'] - rwy.gate[1]) *
+                         (df['lons'] - rwy.gate[1]))
+                         
+        min_d = np.nanmin(dists2)
+        if (min_d < b_dist):
+            pt2 = (min_d == dists2).nonzero()
+            if (len(pt2[0]) > 0):
+                pt2 = pt2[0]
+            pt2 = pt2[0]
+            if (df['gals'][pt2] > 5000):
+                continue
+            if (df['rocs'][pt2] > 150):
+                continue
+            if (df['hdgs'][pt2] > rwy.heading[0] and
+                df['hdgs'][pt2] < rwy.heading[1]):
+                b_dist = min_d
+                b_rwy = rwy
+                dists = dists2
+                b_pos = pt2
+            elif (df['hdgs'][pt2] > rwy.heading[2] and
+                  df['hdgs'][pt2] < rwy.heading[3]):
+                b_dist = min_d
+                b_rwy = rwy
+                dists = dists2
+                b_pos = pt2
+            else:
+                continue
+    if (b_dist > 1./112.):
+        return None, b_pos
+        
+    return b_rwy, b_pos
 
 def get_flight(inf):
     '''
@@ -29,7 +78,6 @@ def get_flight(inf):
             continue
         f_data = flight.data
         f_data = f_data.drop_duplicates('timestamp')
-        f_data = f_data.drop_duplicates('track')
         f_data = f_data.drop_duplicates('longitude')
         f_data = f_data.drop_duplicates('latitude')
         f_data = f_data.query('altitude<10000')
@@ -57,6 +105,9 @@ def check_takeoff(df):
     # Baro can be troublesome as it depends on weather
     alt_sub = df['gals'][0:5]
     alt_sub2 = df['alts'][0:5]
+    if (np.all(df['ongd'][0:5])):
+        if (np.nanmean(alt_sub2 < 3000)):
+            return True
     if (np.all(alt_sub < CNS.takeoff_thresh_alt)):
         return True
     if (np.nanmean(alt_sub) < 3000):
@@ -172,19 +223,21 @@ def check_ga(fd, labels, verbose):
     return ga_flag
 
 
-def proc_fl(flight, odirs, colormap, verbose):
+def proc_fl(flight, check_rwys, odirs, colormap, do_save, verbose):
     '''
     The main processing routine, filters, assigns phases and determines
     go-around status for a given flight.
     Inputs:
         -   A 'traffic' flight object
+        -   A list storing potential landing runways to check
         -   A 4-element list specifying various output directories:
             -   normal plot output
             -   go-around plot output
             -   normal numpy data output
             -   go-around numpy data output
-        -   A string specifying the output directory in which to save figures
-            for flights designated as possible go-arounds
+        -   A dict of colours used for flightpath labelling
+        -   A boolean specifying whether to save data or not
+        -   A boolean specifying whether to use verbose mode
     Returns:
         -   Nothing
     '''
@@ -195,8 +248,9 @@ def proc_fl(flight, odirs, colormap, verbose):
         return -1
     if (verbose):
         print("\t-\tProcessing:", flight.callsign)
-#    flight = flight.resample("1s")
+    flight2 = flight.resample("1s")
     fd = preproc_data(flight)
+    fd2 = preproc_data(flight2)
     if (fd is None):
         if (verbose):
             print("\t-\tBad flight data:", flight.callsign)
@@ -209,18 +263,32 @@ def proc_fl(flight, odirs, colormap, verbose):
         if (verbose):
             print("\t-\tNo state change:", flight.callsign)
         return -1
+        
+    rwy, posser = estimate_rwy(fd2, check_rwys)
+    if (rwy is None):
+        print('WARNING: Cannot find runway for flight '+fd['call'], fd['ic24'])
+    else:
+        fd['rwy'] = rwy.name
+        r_dis = np.sqrt((fd['lats'] - rwy.rwy[0]) *
+                        (fd['lats'] - rwy.rwy[0]) +
+                        (fd['lons'] - rwy.rwy[1]) *
+                        (fd['lons'] - rwy.rwy[1]))
+        r_dis = r_dis * 112.
+        r_dis[0: posser] = r_dis[0: posser] * -1
+        fd['rdis'] = r_dis
 
     ga_flag = check_ga(fd, labels, True)
-    spldict = create_spline(fd)
-    if (ga_flag):
-        odir_pl = odirs[1]
-        odir_np = odirs[3]
-    else:
-        odir_pl = odirs[0]
-        odir_np = odirs[2]
-
-    do_plots(fd, spldict, labels, colormap, odir_pl)
-    to_numpy(fd, odir_np)
+    if (do_save):
+        spldict = create_spline(fd)
+        if (ga_flag):
+            odir_pl = odirs[1]
+            odir_np = odirs[3]
+        else:
+            odir_pl = odirs[0]
+            odir_np = odirs[2]
+#        OSO.do_plots(fd, spldict, labels, colormap, odir_pl)
+        OSO.do_plots_dist(fd, spldict, labels, colormap, odir_pl)
+        OSO.to_numpy(fd, odir_np)
     if (verbose):
         print("\t-\tDONE")
     return ga_flag
@@ -327,13 +395,19 @@ def preproc_data(flight):
     tmp = f_data['timestamp'].values
     ts = (tmp - np.datetime64('1970-01-01T00:00:00')) / np.timedelta64(1, 's')
     times = ts.astype(np.int)
+    
+    # Correct headings into -180 -> 180 range
+    hdgs = f_data['track'].values
+    pts = (hdgs > 180.).nonzero()
+    hdgs[pts] = hdgs[pts] - 360.
+    
     fdata['time'] = times - times[0]
     fdata['lats'] = f_data['latitude'].values
     fdata['lons'] = f_data['longitude'].values
     fdata['alts'] = f_data['altitude'].values
     fdata['spds'] = f_data['groundspeed'].values
     fdata['gals'] = f_data['geoaltitude'].values
-    fdata['hdgs'] = f_data['track'].values
+    fdata['hdgs'] = hdgs
     fdata['rocs'] = f_data['vertical_rate'].values
     fdata['ongd'] = f_data['onground'].values
     fdata['call'] = flight.callsign
@@ -386,88 +460,3 @@ def do_labels(fd):
     labels[pts] = 'GND'
 
     return labels
-
-
-def do_plots(fd, spld, labels, cmap, outdir, odpi=300):
-    '''
-    Inputs:
-        -   A dict of flight data, such as that returned by preproc_data()
-        -   A fict of splines, such as that returned by create_spline()
-        -   A list of classifications, such as that returned by do_labels()
-        -   A colour map, defined as a dict of classifications -> colors
-        -   A string specifying the output directory
-        -   (optional) An int specifying the desired output DPI
-    Returns:
-        -   Nothing
-    '''
-    colors = [cmap[l] for l in labels]
-    fig, ax = plt.subplots(dpi=400)
-    fs = (20, 20)
-    custom_lines = []
-    for color in cmap:
-        lin = Line2D([0], [0], color=cmap[color], lw=0, marker='.')
-        custom_lines.append(lin)
-
-    plt.subplot(311)
-    plt.plot(fd['time'], spld['galspl']/1000., '-', color='k', lw=0.1)
-    plt.scatter(fd['time'], fd['gals']/1000., marker='.', c=colors, lw=0)
-    plt.ylabel('altitude (kft)')
-
-    plt.subplot(312)
-    plt.plot(fd['time'], spld['rocspl']/1000., '-', color='k', lw=0.1)
-    plt.scatter(fd['time'], fd['rocs']/1000., marker='.', c=colors, lw=0)
-    plt.ylabel('roc (kfpm)')
-
-    plt.subplot(313)
-    plt.plot(fd['time'], spld['spdspl'], '-', color='k', lw=0.1)
-    plt.scatter(fd['time'], fd['spds'], marker='.', c=colors, lw=0)
-    plt.ylabel('speed (kts)')
-
-    plt.legend(custom_lines,
-               ['Ground', 'Climb', 'Cruise', 'Descent', 'Level', 'N/A'],
-               bbox_to_anchor=(0., -0.33, 1., 0.102),
-               loc='upper left',
-               ncol=6,
-               mode="expand", borderaxespad=0.)
-
-    plt.tight_layout()
-    
-    odir = outdir + fd['stop'].strftime("%Y%m%d") + '/'
-    if (not os.path.exists(odir)):
-        try:
-            os.mkdir(odir)
-        except:
-            None
-
-    timestr = fd['stop'].strftime("%Y%m%d%H%M")
-    outf = odir + 'FLT_' + fd['ic24'] + '_'
-    outf = outf + fd['call'] + '_'
-    outf = outf + timestr + '.png'
-    plt.savefig(outf,
-                figsize=fs,
-                dpi=odpi,
-                bbox_inches='tight',
-                pad_inches=0)
-    plt.close()
-
-
-def to_numpy(fd, outdir):
-    '''
-    Save data for a single flight into a numpy pickle file.
-    Files are saved in a YYYYMMDD subdirectory.
-    Inputs:
-        -   fd: Dict containing flight info
-        -   outdir: Location to store output
-    Returns:
-        -   Nothing
-    '''
-    odir = outdir + fd['stop'].strftime("%Y%m%d") + '/'
-    if (not os.path.exists(odir)):
-        try:
-            os.mkdir(odir)
-        except:
-            None
-    outf = odir + 'FLT_' + fd['ic24'] + '_'
-    outf = outf + fd['call'] + '_'
-    outf = outf + fd['stop'].strftime("%Y%m%d%H%m") + '.pkl'
-    np.save(outf, fd)
