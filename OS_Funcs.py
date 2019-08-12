@@ -274,7 +274,11 @@ def proc_fl(flight, check_rwys, odirs, colormap, do_save, verbose):
                         (fd['lons'] - rwy.rwy[1]) *
                         (fd['lons'] - rwy.rwy[1]))
         r_dis = r_dis * 112.
-        r_dis[0: posser] = r_dis[0: posser] * -1
+        pt = (np.nanmin(r_dis) == r_dis).nonzero()
+        if (len(pt[0]) > 0):
+            pt = pt[0]
+        pt = pt[0]
+        r_dis[0:pt] = r_dis[0:pt] * -1
         fd['rdis'] = r_dis
 
     ga_flag = check_ga(fd, labels, True)
