@@ -18,9 +18,24 @@ ga_tcheck = 120.
 takeoff_thresh_alt = 600.
 
 
+# The gate maximum altitude for landing, flights above this are not
+# considered for a given runway
+gate_alt = 4000
+
+
+# The rate of climb threshold for the gate, flights greater than this
+# are not considered for a given runway
+gate_roc = 150
+
+
+# The threshold distance between the aircraft and the gate, aircraft
+# further than this are not considered for a given runway
+gate_dist = 1. / 112.
+
+
 # The threshold altitude for the state change, if change occurs above
 # this altitude then it's probably not a go-around
-ga_st_alt_t = 500.
+ga_st_alt_t = 1500.
 
 
 # This is a list of icao24 addresses to exclude, for example general
