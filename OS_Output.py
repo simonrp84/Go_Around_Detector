@@ -70,7 +70,7 @@ def do_plots(fd, spld, labels, cmap, outdir, app_ylim = True, odpi=300):
     timestr = fd['stop'].strftime("%Y%m%d%H%M")
     outf = odir + 'FLT_' + fd['ic24'] + '_'
     outf = outf + fd['call'] + '_'
-    outf = outf + timestr + '.png'
+    outf = outf + timestr + '_TIME.png'
     plt.savefig(outf,
                 figsize=fs,
                 dpi=odpi,
@@ -114,13 +114,6 @@ def do_plots_dist(fd, spld, labels, cmap, outdir,
     pts = (tmprd > xlims[1]).nonzero()
     tmprd[pts] = np.nan
     pts = (tmprd == tmprd).nonzero()
-    
-#    print(tmprd[pts])
-#    print(fd['rdis'][pts])
-#    print(fd['gals'][pts])
-#    print(tmprd[pts])
-#    print(tmprd[pts])
-#    print(tmprd[pts])
 
     plt.subplot(311)
     plt.plot(fd['rdis'], spld['galspl']/1000., '-', color='k', lw=0.1)
@@ -177,7 +170,7 @@ def do_plots_dist(fd, spld, labels, cmap, outdir,
     timestr = fd['stop'].strftime("%Y%m%d%H%M")
     outf = odir + 'FLT_' + fd['ic24'] + '_'
     outf = outf + fd['call'] + '_'
-    outf = outf + timestr + '.png'
+    outf = outf + timestr + '_DIST.png'
     plt.savefig(outf,
                 figsize=fs,
                 dpi=odpi,
