@@ -1,6 +1,8 @@
 from traffic.core import Traffic
 from datetime import timedelta
+
 import multiprocessing as mp
+from OS_Airports import VABB
 import OS_Funcs as OSF
 import glob
 
@@ -13,7 +15,7 @@ def main(start_n):
     # Of which go-arounds
     tot_n_ga = 0
 
-    top_dir = '/gf2/eodg/SRP001_PROUD_TURBREP/GO_AROUNDS/VABB/'
+    top_dir = '/gf2/eodg/SRP002_PROUD_ADSBREP/GO_AROUNDS/VABB/'
     # indir stores the opensky data
     indir = top_dir + 'INDATA/'
 
@@ -68,15 +70,20 @@ def main(start_n):
         traf_arr = Traffic.from_flights(f_data)
         p_list = []
         f_data = []
-
-        end_time = traf_arr.end_time
+        if (len(traf_arr) == 1):
+            end_time = traf_arr.end_time + timedelta(minutes=10)
+            print("Extending timespan due to single aircraft")
+        else:
+            end_time = traf_arr.end_time
 
         # Now we process the results
         for flight in traf_arr:
             if (flight.stop + timedelta(minutes=5) < end_time):
                 p_list.append(pool.apply_async(OSF.proc_fl, args=(flight,
+                                                                  VABB.rwy_list,
                                                                   odirs,
                                                                   colormap,
+                                                                  True,
                                                                   False,)))
             else:
                 f_data.append(flight)
