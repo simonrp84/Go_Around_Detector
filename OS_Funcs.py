@@ -6,7 +6,6 @@ import flightphase as flph
 import OS_Output as OSO
 import OS_Consts as CNS
 import numpy as np
-import os
 
 
 def estimate_rwy(df, rwy_list, verbose):
@@ -23,7 +22,7 @@ def estimate_rwy(df, rwy_list, verbose):
     b_rwy = None
     b_pos = -1.
 
-    for run in range(0,2):
+    for run in range(0, 2):
         for rwy in rwy_list:
             dists2 = np.sqrt((df['lats'] - rwy.gate[0]) *
                              (df['lats'] - rwy.gate[0]) +
@@ -35,8 +34,8 @@ def estimate_rwy(df, rwy_list, verbose):
                 if (len(pt2[0]) > 0):
                     pt2 = pt2[0]
                 pt2 = pt2[0]
-                
-                if (run==1):
+
+                if (run == 1):
                     dists2[pt2] = 999.
                     min_d = np.nanmin(dists2)
                     pt2 = (min_d == dists2).nonzero()
@@ -45,8 +44,8 @@ def estimate_rwy(df, rwy_list, verbose):
                     pt2 = pt2[0]
                 if (df['gals'][pt2] > CNS.gate_alt):
                     if (verbose):
-                        print("Bad geo alt", df['call'], 
-                              df['gals'][pt2] , CNS.gate_alt)
+                        print("Bad geo alt", df['call'],
+                              df['gals'][pt2], CNS.gate_alt)
                     continue
                 if (df['rocs'][pt2] > CNS.gate_roc):
                     if (verbose):
@@ -54,16 +53,14 @@ def estimate_rwy(df, rwy_list, verbose):
                               df['rocs'][pt2], CNS.gate_roc)
                     continue
                 if (df['hdgs'][pt2] >= rwy.heading[0] and
-                    df['hdgs'][pt2] <= rwy.heading[1]):
+                        df['hdgs'][pt2] <= rwy.heading[1]):
                     b_dist = min_d
                     b_rwy = rwy
-                    dists = dists2
                     b_pos = pt2
                 elif (df['hdgs'][pt2] >= rwy.heading[2] and
                       df['hdgs'][pt2] <= rwy.heading[3]):
                     b_dist = min_d
                     b_rwy = rwy
-                    dists = dists2
                     b_pos = pt2
                 else:
                     if (verbose):
@@ -72,10 +69,11 @@ def estimate_rwy(df, rwy_list, verbose):
                     continue
     if (b_dist > CNS.gate_dist):
         if (verbose):
-            print("too far", df['call'],b_dist, CNS.gate_dist)
+            print("too far", df['call'], b_dist, CNS.gate_dist)
         return None, b_pos
-        
+
     return b_rwy, b_pos
+
 
 def get_flight(inf):
     '''
@@ -124,7 +122,7 @@ def check_takeoff(df):
     # Baro can be troublesome as it depends on weather
     alt_sub = df['gals'][0:5]
     alt_sub2 = df['alts'][0:5]
-    
+
     if (np.all(df['ongd'][0:5])):
         if (np.nanmean(alt_sub2 < 3000)):
             return True
@@ -261,7 +259,7 @@ def proc_fl(flight, check_rwys, odirs, colormap, do_save, verbose):
     Returns:
         -   Nothing
     '''
-    
+
     gd_fl = check_good_flight(flight)
     if (not gd_fl):
         if (verbose):
@@ -288,11 +286,12 @@ def proc_fl(flight, check_rwys, odirs, colormap, do_save, verbose):
         if (verbose):
             print("\t-\tNo state change:", flight.callsign)
         return -1
-        
+
     rwy, posser = estimate_rwy(fd2, check_rwys, verbose)
     if (rwy is None):
         if (verbose):
-            print('WARNING: Cannot find runway for flight '+fd['call'], fd['ic24'])
+            print('WARNING: Cannot find runway for flight '
+                  + fd['call'] + ' ' + fd['ic24'])
         pt = (np.nanmin(fd['alts']) == fd['alts']).nonzero()
         if (len(pt[0]) > 0):
             pt = pt[0]
@@ -316,7 +315,7 @@ def proc_fl(flight, check_rwys, odirs, colormap, do_save, verbose):
     r_dis[0:pt] = r_dis[0:pt] * -1
     fd['rdis'] = r_dis
 
-    ga_flag = check_ga(fd, labels, True) 
+    ga_flag = check_ga(fd, labels, True)
     if (do_save):
         spldict = create_spline(fd)
         if (ga_flag):
@@ -326,7 +325,7 @@ def proc_fl(flight, check_rwys, odirs, colormap, do_save, verbose):
             odir_pl = odirs[0]
             odir_np = odirs[2]
         OSO.do_plots(fd, spldict, labels, colormap, odir_pl)
-        OSO.do_plots_dist(fd, spldict, labels, colormap, odir_pl)
+#        OSO.do_plots_dist(fd, spldict, labels, colormap, odir_pl)
         OSO.to_numpy(fd, odir_np)
     if (verbose):
         print("\t-\tDONE")
@@ -421,12 +420,6 @@ def preproc_data(flight, verbose):
         f_data = f_data.drop_duplicates('last_position')
     except KeyError:
         None
-#    f_data = f_data.drop_duplicates('timestamp')
-#    f_data = f_data.drop_duplicates('track')
-#    f_data = f_data.drop_duplicates('longitude')
-#    f_data = f_data.drop_duplicates('latitude')
-#    f_data = f_data.query('altitude<10000')
-#    f_data = f_data.dropna()
 
     if(len(f_data) < 5):
         return None
@@ -435,12 +428,12 @@ def preproc_data(flight, verbose):
     tmp = f_data['timestamp'].values
     ts = (tmp - np.datetime64('1970-01-01T00:00:00')) / np.timedelta64(1, 's')
     times = ts.astype(np.int)
-    
+
     # Correct headings into -180 -> 180 range
     hdgs = f_data['track'].values
     pts = (hdgs > 180.).nonzero()
     hdgs[pts] = hdgs[pts] - 360.
-    
+
     fdata['time'] = times - times[0]
     fdata['lats'] = f_data['latitude'].values
     fdata['lons'] = f_data['longitude'].values

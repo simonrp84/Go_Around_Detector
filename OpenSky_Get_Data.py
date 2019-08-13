@@ -11,18 +11,18 @@ import numpy as np
 import os
 
 # Use this line to change the airport to retrieve.
-import airports.VABB as AIRPRT
+import OS_Airports.VABB as AIRPRT
 
 # Use these lines if you need debug info
 # from traffic.core.logging import loglevel
 # loglevel('DEBUG')
 
 # This line sets the output directory
-outdir = '/gf2/eodg/SRP001_PROUD_TURBREP/GO_AROUNDS/VABB/INDATA/'
+outdir = '/gf2/eodg/SRP002_PROUD_ADSBREP/GO_AROUNDS/VABB/INDATA/'
 
 # Setting up the start and end times for the retrieval
-start_dt = datetime(2018, 8, 1, 0, 0)
-end_dt = datetime(2019, 7, 31, 23, 59)
+start_dt = datetime(2019, 8, 1, 0, 0)
+end_dt = datetime(2019, 8, 12, 23, 59)
 
 # Sets the number of simultaneous retrievals
 nummer = 6

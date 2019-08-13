@@ -4,7 +4,7 @@ import numpy as np
 import os
 
 
-def do_plots(fd, spld, labels, cmap, outdir, app_ylim = True, odpi=300):
+def do_plots(fd, spld, labels, cmap, outdir, app_ylim=True, odpi=300):
     '''
     Creates and saves a series of plots showing relevant data for each
     flight that has been processed. Files are saved in a /YYYMMDD/
@@ -59,7 +59,7 @@ def do_plots(fd, spld, labels, cmap, outdir, app_ylim = True, odpi=300):
                mode="expand", borderaxespad=0.)
 
     plt.tight_layout()
-    
+
     odir = outdir + fd['stop'].strftime("%Y%m%d") + '/'
     if (not os.path.exists(odir)):
         try:
@@ -80,7 +80,7 @@ def do_plots(fd, spld, labels, cmap, outdir, app_ylim = True, odpi=300):
 
 
 def do_plots_dist(fd, spld, labels, cmap, outdir,
-                  app_xlim = True, app_ylim = False, odpi=300):
+                  app_xlim=True, app_ylim=False, odpi=300):
     '''
     Creates and saves a series of plots showing relevant data for each
     flight that has been processed. Files are saved in a /YYYMMDD/
@@ -159,7 +159,7 @@ def do_plots_dist(fd, spld, labels, cmap, outdir,
                mode="expand", borderaxespad=0.)
 
     plt.tight_layout()
-    
+
     odir = outdir + fd['stop'].strftime("%Y%m%d") + '/'
     if (not os.path.exists(odir)):
         try:
