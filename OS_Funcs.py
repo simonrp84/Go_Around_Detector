@@ -9,51 +9,70 @@ import numpy as np
 import os
 
 
-def estimate_rwy(df, rwy_list):
+def estimate_rwy(df, rwy_list, verbose):
     '''
     Guesses which runway a flight is attempting to land on
     Inputs:
         -   df, a dict containing flight information
         -   rwy_list, a list of runways to check, defined in OS_Airports
+        -   verbose, a bool specifying whether to verbosely print updates
     Returns:
         -   A runway class from the list.
     '''
-
     b_dist = 999.
     b_rwy = None
     b_pos = -1.
-    
-    for rwy in rwy_list:
-        dists2 = np.sqrt((df['lats'] - rwy.gate[0]) *
-                         (df['lats'] - rwy.gate[0]) +
-                         (df['lons'] - rwy.gate[1]) *
-                         (df['lons'] - rwy.gate[1]))
-                         
-        min_d = np.nanmin(dists2)
-        if (min_d < b_dist):
-            pt2 = (min_d == dists2).nonzero()
-            if (len(pt2[0]) > 0):
+
+    for run in range(0,2):
+        for rwy in rwy_list:
+            dists2 = np.sqrt((df['lats'] - rwy.gate[0]) *
+                             (df['lats'] - rwy.gate[0]) +
+                             (df['lons'] - rwy.gate[1]) *
+                             (df['lons'] - rwy.gate[1]))
+            min_d = np.nanmin(dists2)
+            if (min_d < b_dist):
+                pt2 = (min_d == dists2).nonzero()
+                if (len(pt2[0]) > 0):
+                    pt2 = pt2[0]
                 pt2 = pt2[0]
-            pt2 = pt2[0]
-            if (df['gals'][pt2] > 5000):
-                continue
-            if (df['rocs'][pt2] > 150):
-                continue
-            if (df['hdgs'][pt2] > rwy.heading[0] and
-                df['hdgs'][pt2] < rwy.heading[1]):
-                b_dist = min_d
-                b_rwy = rwy
-                dists = dists2
-                b_pos = pt2
-            elif (df['hdgs'][pt2] > rwy.heading[2] and
-                  df['hdgs'][pt2] < rwy.heading[3]):
-                b_dist = min_d
-                b_rwy = rwy
-                dists = dists2
-                b_pos = pt2
-            else:
-                continue
-    if (b_dist > 1./112.):
+                
+                if (run==1):
+                    dists2[pt2] = 999.
+                    min_d = np.nanmin(dists2)
+                    pt2 = (min_d == dists2).nonzero()
+                    if (len(pt2[0]) > 0):
+                        pt2 = pt2[0]
+                    pt2 = pt2[0]
+                if (df['gals'][pt2] > CNS.gate_alt):
+                    if (verbose):
+                        print("Bad geo alt", df['call'], 
+                              df['gals'][pt2] , CNS.gate_alt)
+                    continue
+                if (df['rocs'][pt2] > CNS.gate_roc):
+                    if (verbose):
+                        print("Bad rate of climb", df['call'],
+                              df['rocs'][pt2], CNS.gate_roc)
+                    continue
+                if (df['hdgs'][pt2] >= rwy.heading[0] and
+                    df['hdgs'][pt2] <= rwy.heading[1]):
+                    b_dist = min_d
+                    b_rwy = rwy
+                    dists = dists2
+                    b_pos = pt2
+                elif (df['hdgs'][pt2] >= rwy.heading[2] and
+                      df['hdgs'][pt2] <= rwy.heading[3]):
+                    b_dist = min_d
+                    b_rwy = rwy
+                    dists = dists2
+                    b_pos = pt2
+                else:
+                    if (verbose):
+                        print("Bad heading", df['call'],
+                              df['hdgs'][pt2], rwy.heading)
+                    continue
+    if (b_dist > CNS.gate_dist):
+        if (verbose):
+            print("too far", df['call'],b_dist, CNS.gate_dist)
         return None, b_pos
         
     return b_rwy, b_pos
@@ -105,6 +124,7 @@ def check_takeoff(df):
     # Baro can be troublesome as it depends on weather
     alt_sub = df['gals'][0:5]
     alt_sub2 = df['alts'][0:5]
+    
     if (np.all(df['ongd'][0:5])):
         if (np.nanmean(alt_sub2 < 3000)):
             return True
@@ -113,8 +133,8 @@ def check_takeoff(df):
     if (np.nanmean(alt_sub) < 3000):
         if (np.nanmean(alt_sub2[0:2]) < np.nanmean(alt_sub2[2:5])):
             return True
-#    if (np.nanmean(df['rocs'][0:5] > 1000)):
-#        return True
+    if (np.nanmean(df['rocs'][0:5] > 1500)):
+        return True
 
     return False
 
@@ -241,6 +261,7 @@ def proc_fl(flight, check_rwys, odirs, colormap, do_save, verbose):
     Returns:
         -   Nothing
     '''
+    
     gd_fl = check_good_flight(flight)
     if (not gd_fl):
         if (verbose):
@@ -249,11 +270,15 @@ def proc_fl(flight, check_rwys, odirs, colormap, do_save, verbose):
     if (verbose):
         print("\t-\tProcessing:", flight.callsign)
     flight2 = flight.resample("1s")
-    fd = preproc_data(flight)
-    fd2 = preproc_data(flight2)
+    fd = preproc_data(flight, verbose)
+    fd2 = preproc_data(flight2, verbose)
     if (fd is None):
         if (verbose):
-            print("\t-\tBad flight data:", flight.callsign)
+            print("\t-\tBad flight data:", flight.callsign, fd)
+        return -1
+    if (fd2 is None):
+        if (verbose):
+            print("\t-\tBad flight data:", flight.callsign, fd2)
         return -1
     takeoff = check_takeoff(fd)
     if (takeoff == True):
@@ -264,24 +289,34 @@ def proc_fl(flight, check_rwys, odirs, colormap, do_save, verbose):
             print("\t-\tNo state change:", flight.callsign)
         return -1
         
-    rwy, posser = estimate_rwy(fd2, check_rwys)
+    rwy, posser = estimate_rwy(fd2, check_rwys, verbose)
     if (rwy is None):
-        print('WARNING: Cannot find runway for flight '+fd['call'], fd['ic24'])
+        if (verbose):
+            print('WARNING: Cannot find runway for flight '+fd['call'], fd['ic24'])
+        pt = (np.nanmin(fd['alts']) == fd['alts']).nonzero()
+        if (len(pt[0]) > 0):
+            pt = pt[0]
+        pt = pt[0]
+        fd['rwy'] = "None"
+        r_dis = np.sqrt((fd['lats'] - fd['lats'][pt]) *
+                        (fd['lats'] - fd['lats'][pt]) +
+                        (fd['lons'] - fd['lons'][pt]) *
+                        (fd['lons'] - fd['lons'][pt]))
     else:
         fd['rwy'] = rwy.name
         r_dis = np.sqrt((fd['lats'] - rwy.rwy[0]) *
                         (fd['lats'] - rwy.rwy[0]) +
                         (fd['lons'] - rwy.rwy[1]) *
                         (fd['lons'] - rwy.rwy[1]))
-        r_dis = r_dis * 112.
-        pt = (np.nanmin(r_dis) == r_dis).nonzero()
-        if (len(pt[0]) > 0):
-            pt = pt[0]
+    r_dis = r_dis * 112.
+    pt = (np.nanmin(r_dis) == r_dis).nonzero()
+    if (len(pt[0]) > 0):
         pt = pt[0]
-        r_dis[0:pt] = r_dis[0:pt] * -1
-        fd['rdis'] = r_dis
+    pt = pt[0]
+    r_dis[0:pt] = r_dis[0:pt] * -1
+    fd['rdis'] = r_dis
 
-    ga_flag = check_ga(fd, labels, True)
+    ga_flag = check_ga(fd, labels, True) 
     if (do_save):
         spldict = create_spline(fd)
         if (ga_flag):
@@ -290,7 +325,7 @@ def proc_fl(flight, check_rwys, odirs, colormap, do_save, verbose):
         else:
             odir_pl = odirs[0]
             odir_np = odirs[2]
-#        OSO.do_plots(fd, spldict, labels, colormap, odir_pl)
+        OSO.do_plots(fd, spldict, labels, colormap, odir_pl)
         OSO.do_plots_dist(fd, spldict, labels, colormap, odir_pl)
         OSO.to_numpy(fd, odir_np)
     if (verbose):
@@ -337,12 +372,12 @@ def check_good_data(flight):
     Returns:
         -   True if a flight is suitable, false otherwise.
     '''
-    if (np.nanmean(flight.data['geoaltitude']) > 3000):
-        return 'HIGH'
     if (np.all(flight.data['geoaltitude'] > 3000)):
-        return 'HIGH'
+        return 'G_HIGH'
+    if (np.all(flight.data['altitude'] > 3000)):
+        return 'B_HIGH'
     elif (np.all(flight.data['geoaltitude'] < 500)):
-        return 'LOW'
+        return 'G_LOW'
     elif (np.all(flight.data['groundspeed'] < 50)):
         return 'SLOW'
     elif (np.all(flight.data['onground'])):
@@ -351,7 +386,7 @@ def check_good_data(flight):
         return True
 
 
-def preproc_data(flight):
+def preproc_data(flight, verbose):
     '''
     Preprocesses a flight into a format usable by Junzi's classifier
 
@@ -376,8 +411,9 @@ def preproc_data(flight):
         -   dura: Reported duration of the flight
     '''
     isgd = check_good_data(flight)
-    if (not isgd):
-        print("Unsuitable flight:", flight.callsign, isgd)
+    if (isgd != True):
+        if (verbose):
+            print("Unsuitable flight:", flight.callsign, isgd)
         return None
 
     f_data = flight.data
