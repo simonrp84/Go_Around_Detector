@@ -159,12 +159,14 @@ def get_future_time(times, c_pos, n_sec):
     return idx
 
 
-def check_ga(fd, verbose):
+def check_ga(fd, verbose, first_pos=-1):
     '''
     Check if a go-around occurred based on some simple tests
     Inputs:
         -   A dict containing flight data
         -   A boolean for verbose mode. If True, a g/a warning is printed
+        -   (optional) An int specifying the first position in array to check
+            This is useful for situations with multiple g/a's in one track
     Returns:
         -   True if a go-around is likely to have occured
         -   False otherwise
@@ -184,6 +186,9 @@ def check_ga(fd, verbose):
     if (len(main_pts[0]) > 0):
         main_pts = main_pts[0]
     for pt in main_pts:
+        #   Check data is in desired range
+        if (pt < first_pos):
+            continue
         # First check altitude of state change. G/A will be low alt
         if (fd['gals'][pt] > CNS.ga_st_alt_t):
             continue
