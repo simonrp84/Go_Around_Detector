@@ -40,7 +40,7 @@ ga_st_alt_t = 1500.
 
 # This is a list of icao24 addresses to exclude, for example general
 # aviation aircraft or helicopters.
-exclude_list = ['800b7b', '800b7c', '800b7d', '800d5f', ]
+exclude_list = ['800b7b', '800b7c', '800b7d', '800d5f', '800b87', ]
 
 
 # This variable allows you to select a single callsign to process
