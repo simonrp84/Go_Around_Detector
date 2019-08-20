@@ -7,7 +7,7 @@ import OS_Funcs as OSF
 import glob
 
 
-def main(start_n):
+def main(start_n, fidder):
 
     # Total number of aircraft seen
     tot_n_ac = 0
@@ -53,6 +53,9 @@ def main(start_n):
         print("Processing batch starting with "
               + str(main_count + 1).zfill(5) + " of "
               + str(fli_len).zfill(5))
+        fidder.write("Processing batch starting with "
+                     + str(main_count + 1).zfill(5) + " of "
+                     + str(fli_len).zfill(5) + '\n')
 
         p_list = []
         # First we load several files at once
@@ -102,4 +105,8 @@ def main(start_n):
 # Can be helpful if processing fails at some point.
 init_num = 0
 
-main(init_num)
+fid = open('/home/proud/Desktop/log.log', 'w')
+
+main(init_num, fid)
+
+fid.close()
