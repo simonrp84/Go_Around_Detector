@@ -4,7 +4,7 @@ import numpy as np
 import os
 
 
-def do_plots(fd, spld, labels, cmap, outdir, app_ylim=True, odpi=300):
+def do_plots(fd, spld, cmap, outdir, app_ylim=True, odpi=300):
     '''
     Creates and saves a series of plots showing relevant data for each
     flight that has been processed. Files are saved in a /YYYMMDD/
@@ -14,7 +14,6 @@ def do_plots(fd, spld, labels, cmap, outdir, app_ylim=True, odpi=300):
     Inputs:
         -   A dict of flight data, such as that returned by preproc_data()
         -   A fict of splines, such as that returned by create_spline()
-        -   A list of classifications, such as that returned by do_labels()
         -   A colour map, defined as a dict of classifications -> colors
         -   A string specifying the output directory
         -   (optional) A bool specifying to apply predefined axis limits.
@@ -22,7 +21,7 @@ def do_plots(fd, spld, labels, cmap, outdir, app_ylim=True, odpi=300):
     Returns:
         -   Nothing
     '''
-    colors = [cmap[l] for l in labels]
+    colors = [cmap[l] for l in fd['labl']]
     fig, ax = plt.subplots(dpi=400)
     fs = (20, 20)
     custom_lines = []
@@ -79,7 +78,7 @@ def do_plots(fd, spld, labels, cmap, outdir, app_ylim=True, odpi=300):
     plt.close()
 
 
-def do_plots_dist(fd, spld, labels, cmap, outdir,
+def do_plots_dist(fd, spld, cmap, outdir,
                   app_xlim=True, app_ylim=False, odpi=300):
     '''
     Creates and saves a series of plots showing relevant data for each
@@ -90,7 +89,6 @@ def do_plots_dist(fd, spld, labels, cmap, outdir,
     Inputs:
         -   A dict of flight data, such as that returned by preproc_data()
         -   A fict of splines, such as that returned by create_spline()
-        -   A list of classifications, such as that returned by do_labels()
         -   A colour map, defined as a dict of classifications -> colors
         -   A string specifying the output directory
         -   (optional) A bool specifying to apply predefined x-axis limits.
@@ -99,7 +97,7 @@ def do_plots_dist(fd, spld, labels, cmap, outdir,
     Returns:
         -   Nothing
     '''
-    colors = [cmap[l] for l in labels]
+    colors = [cmap[l] for l in fd['labl']]
     fig, ax = plt.subplots(dpi=400)
     fs = (20, 20)
     custom_lines = []

@@ -159,18 +159,19 @@ def get_future_time(times, c_pos, n_sec):
     return idx
 
 
-def check_ga(fd, labels, verbose):
+def check_ga(fd, verbose):
     '''
     Check if a go-around occurred based on some simple tests
     Inputs:
         -   A dict containing flight data
-        -   The flight classification labels
         -   A boolean for verbose mode. If True, a g/a warning is printed
     Returns:
         -   True if a go-around is likely to have occured
         -   False otherwise
     '''
     ga_flag = False
+
+    labels = fd['labl']
 
     lblen = len(labels)
     cng = np.zeros(lblen, dtype=bool)
@@ -286,7 +287,7 @@ def proc_fl(flight, check_rwys, odirs, colormap, do_save, verbose):
         if (verbose):
             print("\t-\tNo state change:", flight.callsign)
         return -1
-
+    fd['labl'] = labels
     rwy, posser = estimate_rwy(fd2, check_rwys, verbose)
     if (rwy is None):
         if (verbose):
@@ -315,7 +316,7 @@ def proc_fl(flight, check_rwys, odirs, colormap, do_save, verbose):
     r_dis[0:pt] = r_dis[0:pt] * -1
     fd['rdis'] = r_dis
 
-    ga_flag = check_ga(fd, labels, True)
+    ga_flag = check_ga(fd, True)
     if (do_save):
         spldict = create_spline(fd)
         if (ga_flag):
@@ -324,8 +325,8 @@ def proc_fl(flight, check_rwys, odirs, colormap, do_save, verbose):
         else:
             odir_pl = odirs[0]
             odir_np = odirs[2]
-        OSO.do_plots(fd, spldict, labels, colormap, odir_pl)
-#        OSO.do_plots_dist(fd, spldict, labels, colormap, odir_pl)
+        OSO.do_plots(fd, spldict, colormap, odir_pl)
+#        OSO.do_plots_dist(fd, spldict, colormap, odir_pl)
         OSO.to_numpy(fd, odir_np)
     if (verbose):
         print("\t-\tDONE")
