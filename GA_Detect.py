@@ -75,7 +75,7 @@ def main(start_n):
             t_res = p.get()
             if (t_res != -1):
                 tot_n_ac += 1
-                gafs = t_res[2:6]
+                gafs = t_res[2:7]
                 if any(gaf for gaf in gafs):
                     ga_fid.write(str(t_res[0]) + ',' +
                                  t_res[1].strftime("%Y%m%d %H:%M:%S") + ',' +
@@ -84,8 +84,7 @@ def main(start_n):
                                  str(t_res[4]) + ',' +
                                  str(t_res[5]) + ',' +
                                  str(t_res[6]) + '\n')
-        print("\t-\tHave processed " + str(tot_n_ac) +
-              " aircraft. Have seen " + str(tot_n_ga) + " go-arounds.")
+        print("\t-\tHave processed " + str(tot_n_ac) + " aircraft.")
 
 
 # Use this to start processing from a given file number.
