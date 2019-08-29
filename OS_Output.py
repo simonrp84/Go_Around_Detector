@@ -115,7 +115,7 @@ def make_yvals(dists, multis):
     return yvals
 
 def do_plots_dist(fd, spld, cmap, outdir,
-                  app_xlim=True, app_ylim=True, odpi=300, rwy=None, bpos = None):
+                  app_xlim=True, app_ylim=False, odpi=300, rwy=None, bpos = None):
     '''
     Creates and saves a series of plots showing relevant data for each
     flight that has been processed. Files are saved in a /YYYMMDD/
