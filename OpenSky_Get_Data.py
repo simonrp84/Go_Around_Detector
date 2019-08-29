@@ -21,8 +21,8 @@ import OS_Airports.VABB as AIRPRT
 outdir = '/gf2/eodg/SRP002_PROUD_ADSBREP/GO_AROUNDS/VABB/INDATA/'
 
 # Setting up the start and end times for the retrieval
-start_dt = datetime(2019, 8, 1, 0, 0)
-end_dt = datetime(2019, 8, 12, 23, 59)
+start_dt = datetime(2019, 8, 10, 0, 0)
+end_dt = datetime(2019, 8, 20, 23, 59)
 
 # Sets the number of simultaneous retrievals
 nummer = 6

@@ -1,6 +1,6 @@
 from traffic.core import Traffic
 from datetime import timedelta
-
+import metar_parse as MEP
 import multiprocessing as mp
 from OS_Airports import VABB
 import OS_Funcs as OSF
@@ -32,6 +32,14 @@ def main(start_n, fidder):
     odir_da_ga = top_dir + 'OUT_DATA/PSGA/'
 
     odirs = [odir_pl_nm, odir_pl_ga, odir_da_nm, odir_da_ga]
+    
+    # Read METARs from disk
+    metars = MEP.get_metars('/home/proud/Desktop/GoAround_Paper/VABB_METAR')
+    
+    # File to save met info for g/a flights
+    metfid = open('/home/proud/Desktop/GoAround_Paper/GA_MET.csv','w')
+    metfid.write('ICAO24, Callsign, Time, Runway, Temp, Dewp, Wind_Spd,\
+                  Wind_Gust, Wind_Dir,CB, Pressure\n')
 
     files = glob.glob(indir+'*.pkl')
     files.sort()
@@ -44,7 +52,7 @@ def main(start_n, fidder):
     # Number of files to open in one go
     n_files_proc = 55
 
-    pool_proc = 100
+    pool_proc = 56
 
     f_data = []
     pool = mp.Pool(processes=pool_proc)
@@ -86,6 +94,7 @@ def main(start_n, fidder):
                                                                   VABB.rwy_list,
                                                                   odirs,
                                                                   colormap,
+                                                                  metars,
                                                                   True,
                                                                   False,)))
             else:
@@ -95,10 +104,23 @@ def main(start_n, fidder):
             t_res = p.get()
             if (t_res != -1):
                 tot_n_ac += 1
-                if (t_res):
+                if (t_res[0]):
+                    metfid.write(t_res[1] + ',' + t_res[2] + ',')
+                    metfid.write(t_res[3].strftime("%Y%m%d%H%M") + ',')
+                    metfid.write(t_res[4] + ',')
+                    metfid.write(str(t_res[5].temp) + ',')
+                    metfid.write(str(t_res[5].dewp) + ',')
+                    metfid.write(str(t_res[5].w_s) + ',')
+                    metfid.write(str(t_res[5].w_g) + ',')
+                    metfid.write(str(t_res[5].w_d) + ',')
+                    metfid.write(str(t_res[5].cb) + ',')
+                    metfid.write(str(t_res[5].vis) + ',')
+                    metfid.write(str(t_res[5].pres) + '\n')
                     tot_n_ga += 1
         print("\t-\tHave processed " + str(tot_n_ac) +
               " aircraft. Have seen " + str(tot_n_ga) + " go-arounds.")
+              
+    metfid.close()
 
 
 # Use this to start processing from a given file number.

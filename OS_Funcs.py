@@ -1,6 +1,7 @@
 from scipy.interpolate import UnivariateSpline as UniSpl
 from traffic.core import Traffic
 from datetime import timedelta
+import pandas as pd
 
 import flightphase as flph
 import OS_Output as OSO
@@ -168,10 +169,11 @@ def check_ga(fd, verbose, first_pos=-1):
         -   (optional) An int specifying the first position in array to check
             This is useful for situations with multiple g/a's in one track
     Returns:
-        -   True if a go-around is likely to have occured
-        -   False otherwise
+        -   True if a go-around is likely to have occurred, false otherwise
+        -   An int specifying the array location where g/a occurred, or None
     '''
     ga_flag = False
+    bpt = None
 
     labels = fd['labl']
 
@@ -203,15 +205,15 @@ def check_ga(fd, verbose, first_pos=-1):
         # bad data on landing
         t_pos = get_future_time(fd['time'], pt, CNS.ga_tcheck)
         if (t_pos < 0):
-            lenner = len(fd['gals'])
+            lenner = len(fd['alts'])
             r_time = np.nanmean(fd['time'][pt:lenner])
             if (r_time > fd['time'][pt] + (CNS.ga_tcheck * 2.)):
                 continue
-            alt_sub = fd['gals'][pt:lenner]
+            alt_sub = fd['alts'][pt:lenner]
             vrt_sub = fd['rocs'][pt:lenner]
-            n_pos = len(fd['gals']) - pt
+            n_pos = len(fd['alts']) - pt
         else:
-            alt_sub = fd['gals'][pt:t_pos]
+            alt_sub = fd['alts'][pt:t_pos]
             vrt_sub = fd['rocs'][pt:t_pos]
             n_pos = t_pos - pt
 
@@ -243,11 +245,12 @@ def check_ga(fd, verbose, first_pos=-1):
                       fd['ic24'],
                       ga_time.strftime("%Y-%m-%d %H:%M"))
             ga_flag = True
+            bpt = pt
 
-    return ga_flag
+    return ga_flag, bpt
 
 
-def proc_fl(flight, check_rwys, odirs, colormap, do_save, verbose):
+def proc_fl(flight, check_rwys, odirs, colormap, metars, do_save, verbose):
     '''
     The main processing routine, filters, assigns phases and determines
     go-around status for a given flight.
@@ -260,6 +263,7 @@ def proc_fl(flight, check_rwys, odirs, colormap, do_save, verbose):
             -   normal numpy data output
             -   go-around numpy data output
         -   A dict of colours used for flightpath labelling
+        -   A dict of METARs used for correcting barometric altitude
         -   A boolean specifying whether to save data or not
         -   A boolean specifying whether to use verbose mode
     Returns:
@@ -293,6 +297,7 @@ def proc_fl(flight, check_rwys, odirs, colormap, do_save, verbose):
             print("\t-\tNo state change:", flight.callsign)
         return -1
     fd['labl'] = labels
+
     rwy, posser = estimate_rwy(fd2, check_rwys, verbose)
     if (rwy is None):
         if (verbose):
@@ -320,22 +325,40 @@ def proc_fl(flight, check_rwys, odirs, colormap, do_save, verbose):
     pt = pt[0]
     r_dis[0:pt] = r_dis[0:pt] * -1
     fd['rdis'] = r_dis
+    
+    # Correct barometric altitudes
+    t_alt = fd['alts']
+    l_time = fd['strt'] + (fd['dura'] / 2)
+    l_time = pd.Timestamp(l_time, tz='UTC')
+    bmet, tdiff = find_closest_metar(l_time, metars)
+    if (bmet is not None):
+        t_alt = correct_baro(t_alt, bmet.temp, bmet.pres)
+    else:
+        print("Warning: No METAR available for alt correction!",
+              bmet, tdiff, l_time)
+    fd['alts'] = t_alt
 
-    ga_flag = check_ga(fd, True)
+    ga_flag, gapt = check_ga(fd, True)
+            
     if (do_save):
-        spldict = create_spline(fd)
+        spldict = create_spline(fd, bpos = gapt)
         if (ga_flag):
             odir_pl = odirs[1]
             odir_np = odirs[3]
         else:
             odir_pl = odirs[0]
             odir_np = odirs[2]
-        OSO.do_plots(fd, spldict, colormap, odir_pl)
-#        OSO.do_plots_dist(fd, spldict, colormap, odir_pl)
-        OSO.to_numpy(fd, odir_np)
+#        OSO.do_plots(fd, spldict, colormap, odir_pl, rwy=rwy)
+        if (ga_flag):
+            OSO.do_plots_dist(fd, spldict, colormap, odir_pl, rwy=rwy, bpos = gapt)
+    if (rwy != None):
+        garr = [ga_flag, fd['ic24'], fd['call'], l_time, rwy.name, bmet]
+    else:
+        garr = [ga_flag, fd['ic24'], fd['call'], l_time, 'None', bmet]
+#        OSO.to_numpy(fd, odir_np)
     if (verbose):
         print("\t-\tDONE")
-    return ga_flag
+    return garr
 
 
 def check_good_flight(flight):
@@ -397,6 +420,7 @@ def preproc_data(flight, verbose):
 
     Input:
         -   A flight produced by the 'traffic' library.
+        -   A bool specifying verbose mode
     Returns:
         A dict containing:
         -   time: The time-since-first-contact for each datapoint
@@ -458,12 +482,61 @@ def preproc_data(flight, verbose):
     return fdata
 
 
-def create_spline(fd):
+def find_closest_metar(l_time, metars):
+    '''
+    Finds the best-fitting metar from a dict that matches a specified
+    time value
+    Inputs:
+        -   The time to match (datetime)
+        -   A dict of METARS, each as a metobs class
+    Returns:
+        The best metar (as metobs) and the time difference in seconds
+    '''
+    tdiff = 1e8
+    bmet = None
+
+    timelist = list(metars.keys())
+    in_time = l_time.to_pydatetime()
+    btim = min(timelist, key=lambda date: abs(in_time-date))
+    tdiff = abs((btim - in_time).total_seconds())
+    if (tdiff < 3600):
+        bmet = metars[btim]
+    return bmet, tdiff
+
+
+def correct_baro(balt, t0, p0):
+    '''
+    A function to correct barometric altitude values from ISA to actual
+    Inputs:
+        -   balt: An array of baro altitudes
+        -   t0: A float with the surface temperature (C)
+        -   p0: A float with the surface pressure (hPa)
+    Returns:
+        -   An array of corrected baro alts
+    '''
+    isa_t = 15.0
+    isa_p = 1013.25
+    # First, compute ISA pressure
+    tmp = (balt / 3.28084) / (273.15 + isa_t)
+    pres = isa_p * np.power(1 - (0.0065 * tmp), 5.2561)
+    # Now correct alt
+    t1 = pres / p0
+    t2 = 1. / 5.2561
+    t3 = np.power(t1, t2)
+    t4 = 1 - t3
+    t5 = (273.15 + t0) / 0.0065
+    alt = (t5 * t4) * 3.28084
+
+    return alt
+
+
+def create_spline(fd, bpos = None):
     '''
     Creates the splines needed for plotting smoothed lines
     on the output graphs
     Input:
         -   A dict of flight data, such as that returned by preproc_data()
+        -   An int speicfying the max array value to use
     Returns:
         A dict containing:
         -   altspl
@@ -473,11 +546,15 @@ def create_spline(fd):
         -   hdgspl
     '''
     spldict = {}
-    spldict['altspl'] = UniSpl(fd['time'], fd['alts'])(fd['time'])
-    spldict['spdspl'] = UniSpl(fd['time'], fd['spds'])(fd['time'])
-    spldict['rocspl'] = UniSpl(fd['time'], fd['rocs'])(fd['time'])
-    spldict['galspl'] = UniSpl(fd['time'], fd['gals'])(fd['time'])
-    spldict['hdgspl'] = UniSpl(fd['time'], fd['hdgs'])(fd['time'])
+    if (bpos == None):
+        bpos = len(fd['time'])
+    spldict['altspl'] = UniSpl(fd['time'][0: bpos], fd['alts'][0: bpos])(fd['time'][0: bpos])
+    spldict['spdspl'] = UniSpl(fd['time'][0: bpos], fd['spds'][0: bpos])(fd['time'][0: bpos])
+    spldict['rocspl'] = UniSpl(fd['time'][0: bpos], fd['rocs'][0: bpos])(fd['time'][0: bpos])
+    spldict['galspl'] = UniSpl(fd['time'][0: bpos], fd['gals'][0: bpos])(fd['time'][0: bpos])
+    spldict['hdgspl'] = UniSpl(fd['time'][0: bpos], fd['hdgs'][0: bpos])(fd['time'][0: bpos])
+    spldict['latspl'] = UniSpl(fd['time'][0: bpos], fd['lats'][0: bpos])(fd['time'][0: bpos])
+    spldict['lonspl'] = UniSpl(fd['time'][0: bpos], fd['lons'][0: bpos])(fd['time'][0: bpos])
 
     return spldict
 
