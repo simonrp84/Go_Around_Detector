@@ -1,6 +1,8 @@
+"""Core methods for processing ADS-B data and detecting go-arounds."""
 from scipy.interpolate import UnivariateSpline as UniSpl
 from traffic.core import Traffic
 from datetime import timedelta
+import metar_parse as MEP
 import pandas as pd
 
 import flightphase as flph
@@ -9,16 +11,20 @@ import OS_Consts as CNS
 import numpy as np
 
 
+# Read METARs from disk
+metars = MEP.get_metars('/home/proud/Desktop/GoAround_Paper/VABB_METAR')
+
+
 def estimate_rwy(df, rwy_list, verbose):
-    '''
-    Guesses which runway a flight is attempting to land on
+    """Guess which runway a flight is attempting to land on.
+
     Inputs:
         -   df, a dict containing flight information
         -   rwy_list, a list of runways to check, defined in OS_Airports
         -   verbose, a bool specifying whether to verbosely print updates
     Returns:
         -   A runway class from the list.
-    '''
+    """
     b_dist = 999.
     b_rwy = None
     b_pos = -1.
@@ -77,13 +83,13 @@ def estimate_rwy(df, rwy_list, verbose):
 
 
 def get_flight(inf):
-    '''
-    Load a series of flights from a file using Xavier's 'traffic' library
+    """Load a series of flights from a file using Xavier's 'traffic' library.
+
     Input:
         -   inf, the input filename
     Returns:
         -   a list of flights
-    '''
+    """
     flist = []
 #    try:
     fdata = Traffic.from_file(inf).query("latitude == latitude")
@@ -106,13 +112,13 @@ def get_flight(inf):
 
 
 def check_takeoff(df):
-    '''
-    Checks if a flight is taking off. If so, we're not interested
+    """Check if a flight is taking off. If so, we're not interested.
+
     Input:
         -   df, a dict containing flight data
     Returns:
         -   True if a takeoff, otherwise False
-    '''
+    """
     lf = len(df['gals'])
     # Check if there's enough data to process
     if (lf < 10):
@@ -139,9 +145,8 @@ def check_takeoff(df):
 
 
 def get_future_time(times, c_pos, n_sec):
-    '''
-    Find the array location that has the time closest to a
-    certain amount in the future.
+    """Find the array location that has the time closest to a certain amount in the future.
+
     Inputs:
         -   Times, an array of times in integer/float seconds
         -   c_pos, the position in the array of the initial time
@@ -149,7 +154,7 @@ def get_future_time(times, c_pos, n_sec):
     Returns:
         -   An integer array position (>0) if time is found, or
             -1 if the time is not found
-    '''
+    """
     c_time = times[c_pos]
     f_time = c_time + n_sec
     diff = (np.abs(times - f_time))
@@ -161,8 +166,8 @@ def get_future_time(times, c_pos, n_sec):
 
 
 def check_ga(fd, verbose, first_pos=-1):
-    '''
-    Check if a go-around occurred based on some simple tests
+    """Check if a go-around occurred based on some simple tests.
+
     Inputs:
         -   A dict containing flight data
         -   A boolean for verbose mode. If True, a g/a warning is printed
@@ -171,7 +176,7 @@ def check_ga(fd, verbose, first_pos=-1):
     Returns:
         -   True if a go-around is likely to have occurred, false otherwise
         -   An int specifying the array location where g/a occurred, or None
-    '''
+    """
     ga_flag = False
     bpt = None
 
@@ -183,7 +188,7 @@ def check_ga(fd, verbose, first_pos=-1):
         if (labels[i] != labels[i-1]):
             cng[i] = True
     main_pts = (cng).nonzero()
-    if (np.all(cng == False)):
+    if np.all(cng is False):
         return ga_flag
     if (len(main_pts[0]) > 0):
         main_pts = main_pts[0]
@@ -192,7 +197,7 @@ def check_ga(fd, verbose, first_pos=-1):
         if (pt < first_pos):
             continue
         # First check altitude of state change. G/A will be low alt
-        if (fd['gals'][pt] > CNS.ga_st_alt_t):
+        if (fd['alts'][pt] > CNS.ga_st_alt_t):
             continue
         # We only want points where initial state is Descent
         if (labels[pt-1] != "DE"):
@@ -238,7 +243,7 @@ def check_ga(fd, verbose, first_pos=-1):
         vrts_p = (n_pts_vrt/n_pos)*100.
 
         if (n_pos > 10 and alts_p > 50 and vrts_p > 20):
-            if (verbose):
+            if verbose:
                 ga_time = fd['strt'] + timedelta(seconds=int(fd['time'][pt]))
                 print("\t-\tG/A warning:",
                       fd['call'],
@@ -250,10 +255,9 @@ def check_ga(fd, verbose, first_pos=-1):
     return ga_flag, bpt
 
 
-def proc_fl(flight, check_rwys, odirs, colormap, metars, do_save, verbose):
-    '''
-    The main processing routine, filters, assigns phases and determines
-    go-around status for a given flight.
+def proc_fl(flight, check_rwys, odirs, colormap, do_save, verbose):
+    """Filter, assign phases and determine go-around status for a given flight.
+
     Inputs:
         -   A 'traffic' flight object
         -   A list storing potential landing runways to check
@@ -263,61 +267,79 @@ def proc_fl(flight, check_rwys, odirs, colormap, metars, do_save, verbose):
             -   normal numpy data output
             -   go-around numpy data output
         -   A dict of colours used for flightpath labelling
-        -   A dict of METARs used for correcting barometric altitude
         -   A boolean specifying whether to save data or not
         -   A boolean specifying whether to use verbose mode
     Returns:
         -   Nothing
-    '''
-
+    """
+    # First, check if a flight is not on exclusion list
     gd_fl = check_good_flight(flight)
     if (not gd_fl):
         if (verbose):
             print("\t-\tBad flight call:", flight.callsign)
         return -1
+
+    # Print some details if verbose
     if (verbose):
         print("\t-\tProcessing:", flight.callsign)
+
+    # Resample trajectory to one second, this is used for runway estimation
     flight2 = flight.resample("1s")
+
+    # Preprocess the data, sorting by time and putting into UNIX format
     fd = preproc_data(flight, verbose)
     fd2 = preproc_data(flight2, verbose)
+
+    # If we don't have good data here, skip
     if (fd is None):
         if (verbose):
             print("\t-\tBad flight data:", flight.callsign, fd)
         return -1
     if (fd2 is None):
-        if (verbose):
+        if verbose:
             print("\t-\tBad flight data:", flight.callsign, fd2)
         return -1
+
+    # We don't care about take-offs, so find and exclude
     takeoff = check_takeoff(fd)
-    if (takeoff == True):
+    if takeoff:
         return -1
+    # Use Junzi's labelling method to get flight phases
     labels = do_labels(fd)
     if (np.all(labels == labels[0])):
-        if (verbose):
+        if verbose:
             print("\t-\tNo state change:", flight.callsign)
         return -1
     fd['labl'] = labels
 
+    # Estimate which runway the flight is landing on (rwy), and at what
+    # point in the data arrays it does so (posser).
     rwy, posser = estimate_rwy(fd2, check_rwys, verbose)
-    if (rwy is None):
-        if (verbose):
+    rwy2, posser2 = estimate_rwy(fd, check_rwys, verbose)
+
+    # If we can't estimate a runway, try using minimum altitude
+    # Either way, compute relative distances to the runway / minimum point
+    min_alt_pt = (np.nanmin(fd['alts']) == fd['alts']).nonzero()
+    if (len(min_alt_pt[0]) > 0):
+        min_alt_pt = min_alt_pt[0]
+    min_alt_pt = min_alt_pt[0]
+    if rwy is None:
+        if verbose:
             print('WARNING: Cannot find runway for flight '
                   + fd['call'] + ' ' + fd['ic24'])
-        pt = (np.nanmin(fd['alts']) == fd['alts']).nonzero()
-        if (len(pt[0]) > 0):
-            pt = pt[0]
-        pt = pt[0]
         fd['rwy'] = "None"
-        r_dis = np.sqrt((fd['lats'] - fd['lats'][pt]) *
-                        (fd['lats'] - fd['lats'][pt]) +
-                        (fd['lons'] - fd['lons'][pt]) *
-                        (fd['lons'] - fd['lons'][pt]))
+        r_dis = np.sqrt((fd['lats'] - fd['lats'][min_alt_pt]) *
+                        (fd['lats'] - fd['lats'][min_alt_pt]) +
+                        (fd['lons'] - fd['lons'][min_alt_pt]) *
+                        (fd['lons'] - fd['lons'][min_alt_pt]))
     else:
         fd['rwy'] = rwy.name
         r_dis = np.sqrt((fd['lats'] - rwy.rwy[0]) *
                         (fd['lats'] - rwy.rwy[0]) +
                         (fd['lons'] - rwy.rwy[1]) *
                         (fd['lons'] - rwy.rwy[1]))
+
+    # Convert degrees into km, not perfect but good enough
     r_dis = r_dis * 112.
     pt = (np.nanmin(r_dis) == r_dis).nonzero()
     if (len(pt[0]) > 0):
@@ -325,7 +347,7 @@ def proc_fl(flight, check_rwys, odirs, colormap, metars, do_save, verbose):
     pt = pt[0]
     r_dis[0:pt] = r_dis[0:pt] * -1
     fd['rdis'] = r_dis
-    
+
     # Correct barometric altitudes
     t_alt = fd['alts']
     l_time = fd['strt'] + (fd['dura'] / 2)
@@ -338,40 +360,99 @@ def proc_fl(flight, check_rwys, odirs, colormap, metars, do_save, verbose):
               bmet, tdiff, l_time)
     fd['alts'] = t_alt
 
+    # Now the actual go-around check
     ga_flag, gapt = check_ga(fd, True)
-            
-    if (do_save):
-        spldict = create_spline(fd, bpos = gapt)
+
+    # Make some plots if required, this needs a spline to smooth output
+    if do_save:
+        spldict = create_spline(fd, bpos=None)
+        # Choose output directory based upon go-around flag
         if (ga_flag):
             odir_pl = odirs[1]
             odir_np = odirs[3]
         else:
             odir_pl = odirs[0]
             odir_np = odirs[2]
-#        OSO.do_plots(fd, spldict, colormap, odir_pl, rwy=rwy)
-        if (ga_flag):
-            OSO.do_plots_dist(fd, spldict, colormap, odir_pl, rwy=rwy, bpos = gapt)
-    if (rwy != None):
-        garr = [ga_flag, fd['ic24'], fd['call'], l_time, rwy.name, bmet]
+        OSO.do_plots(fd,
+                     spldict,
+                     colormap,
+                     odir_pl,
+                     rwy=rwy,
+                     bpos=None)
+    if (ga_flag):
+        ga_time = pd.Timestamp(fd['strt'] +
+                               pd.Timedelta(seconds=fd['time'][gapt]),
+                               tz='UTC')
     else:
-        garr = [ga_flag, fd['ic24'], fd['call'], l_time, 'None', bmet]
-#        OSO.to_numpy(fd, odir_np)
+        gapt = 0
+        ga_time = fd['strt']
+
+    # Get the correct position of landing / go-around
+    gdpt = -1
+    if (ga_flag):
+        if (gapt >= 10):
+            gdpt = gapt
+    elif (posser2 >= 10):
+        gdpt = posser2
+    elif (min_alt_pt >= 10):
+        gdpt = min_alt_pt
+    else:
+        gdpt = -1
+
+    # Compute std dev for some variables immediately before g/a or landing
+    if (gdpt >= 10):
+        rocvar = np.std(fd['rocs'][gdpt-10:gdpt])
+        hdgvar = np.std(fd['hdgs'][gdpt-10:gdpt])
+        latvar = np.std(fd['lats'][gdpt-10:gdpt])
+        lonvar = np.std(fd['lons'][gdpt-10:gdpt])
+        gspvar = np.std(fd['spds'][gdpt-10:gdpt])
+        timer = fd['time'][gdpt] - fd['time'][gdpt-10]
+
+        rocvar = rocvar / timer
+        hdgvar = hdgvar / timer
+        latvar = latvar / timer
+        lonvar = lonvar / timer
+        gspvar = gspvar / timer
+    else:
+        rocvar = 0
+        hdgvar = 0
+        latvar = 0
+        lonvar = 0
+        gspvar = 0
+
+    # Return data to the calling function
+    if rwy is not None:
+        garr = [ga_flag, fd['ic24'], fd['call'], l_time,
+                ga_time, rwy.name, fd['hdgs'][gapt],
+                fd['alts'][gapt], fd['lats'][gapt], fd['lons'][gapt],
+                gapt, rocvar, hdgvar, latvar, lonvar, gspvar,
+                bmet]
+    else:
+        garr = [ga_flag, fd['ic24'], fd['call'], l_time,
+                ga_time, 'None', fd['hdgs'][gapt],
+                fd['alts'][gapt], fd['lats'][gapt], fd['lons'][gapt],
+                gapt, rocvar, hdgvar, latvar, lonvar, gspvar,
+                bmet]
+    fd['posser'] = posser2
+    fd['gapt'] = gapt
+    fd['min_alt_pt'] = min_alt_pt
+    OSO.to_numpy(fd, odir_np)
     if (verbose):
         print("\t-\tDONE")
     return garr
 
 
 def check_good_flight(flight):
-    '''
-    Checks if the flight callsign matches a series of
-    pre-defined 'bad' callsigns. Most of these are
-    ground vehicles.
+    """Check if the flight callsign matches a series of pre-defined 'bad' callsigns.
+
+    Most of these are ground vehicles.
     Input:
         -   A flight produced by the 'traffic' library.
     Returns:
         -   False if callsign matches one of the 'bad' list
         -   True if flight is not matched
-    '''
+
+    """
     if (flight.icao24 in CNS.exclude_list):
         return False
     if (flight.callsign[0:7] == 'WILDLIF'):
@@ -391,15 +472,16 @@ def check_good_flight(flight):
 
 
 def check_good_data(flight):
-    '''
-    Checks that a flight has data suitable for inclusion in the study.
+    """Check that a flight has data suitable for inclusion in the study.
+
     This discards ground-only flights, as well as those that do not appear
     to be attempting a landing.
     Input:
         -   A flight produced by the 'traffic' library.
     Returns:
         -   True if a flight is suitable, false otherwise.
-    '''
+
+    """
     if (np.all(flight.data['geoaltitude'] > 3000)):
         return 'G_HIGH'
     if (np.all(flight.data['altitude'] > 3000)):
@@ -415,8 +497,7 @@ def check_good_data(flight):
 
 
 def preproc_data(flight, verbose):
-    '''
-    Preprocesses a flight into a format usable by Junzi's classifier
+    """Preprocesses a flight into a format usable by Junzi's classifier.
 
     Input:
         -   A flight produced by the 'traffic' library.
@@ -438,9 +519,10 @@ def preproc_data(flight, verbose):
         -   strt: Time of first position in the flight datastream
         -   stop: Time of last position in the flight datastream
         -   dura: Reported duration of the flight
-    '''
+
+    """
     isgd = check_good_data(flight)
-    if (isgd != True):
+    if (not isgd):
         if (verbose):
             print("Unsuitable flight:", flight.callsign, isgd)
         return None
@@ -473,6 +555,22 @@ def preproc_data(flight, verbose):
     fdata['hdgs'] = hdgs
     fdata['rocs'] = f_data['vertical_rate'].values
     fdata['ongd'] = f_data['onground'].values
+
+    # The next bit is needed in case a flight crosses two pkl files, which are
+    # usually one hour long. So a flight going from 00:59 -> 01:00 is in two
+    # files, and due to multiprocessing the two segments may be reversed.
+    df_tmp = pd.DataFrame(fdata)
+    df_new = df_tmp.sort_values(by=['time'])
+
+    fdata['time'] = df_new['time'].values
+    fdata['lats'] = df_new['lats'].values
+    fdata['lons'] = df_new['lons'].values
+    fdata['alts'] = df_new['alts'].values
+    fdata['spds'] = df_new['spds'].values
+    fdata['gals'] = df_new['gals'].values
+    fdata['hdgs'] = df_new['hdgs'].values
+    fdata['rocs'] = df_new['rocs'].values
+    fdata['ongd'] = df_new['ongd'].values
     fdata['call'] = flight.callsign
     fdata['ic24'] = flight.icao24
     fdata['strt'] = flight.start
@@ -483,15 +581,15 @@ def preproc_data(flight, verbose):
 
 
 def find_closest_metar(l_time, metars):
-    '''
-    Finds the best-fitting metar from a dict that matches a specified
-    time value
+    """Find the best-fitting metar from a dict that matches a specified time value.
+
     Inputs:
         -   The time to match (datetime)
         -   A dict of METARS, each as a metobs class
     Returns:
         The best metar (as metobs) and the time difference in seconds
-    '''
+
+    """
     tdiff = 1e8
     bmet = None
 
@@ -505,15 +603,16 @@ def find_closest_metar(l_time, metars):
 
 
 def correct_baro(balt, t0, p0):
-    '''
-    A function to correct barometric altitude values from ISA to actual
+    """Correct barometric altitude values from ISA to actual.
+
     Inputs:
         -   balt: An array of baro altitudes
         -   t0: A float with the surface temperature (C)
         -   p0: A float with the surface pressure (hPa)
     Returns:
         -   An array of corrected baro alts
-    '''
+
+    """
     isa_t = 15.0
     isa_p = 1013.25
     # First, compute ISA pressure
@@ -530,10 +629,9 @@ def correct_baro(balt, t0, p0):
     return alt
 
 
-def create_spline(fd, bpos = None):
-    '''
-    Creates the splines needed for plotting smoothed lines
-    on the output graphs
+def create_spline(fd, bpos=None):
+    """Create the splines needed for plotting smoothed lines on the output graphs.
+
     Input:
         -   A dict of flight data, such as that returned by preproc_data()
         -   An int speicfying the max array value to use
@@ -544,34 +642,46 @@ def create_spline(fd, bpos = None):
         -   rocspl
         -   galspl
         -   hdgspl
-    '''
+
+    """
     spldict = {}
-    if (bpos == None):
+    if (bpos is None):
         bpos = len(fd['time'])
-    spldict['altspl'] = UniSpl(fd['time'][0: bpos], fd['alts'][0: bpos])(fd['time'][0: bpos])
-    spldict['spdspl'] = UniSpl(fd['time'][0: bpos], fd['spds'][0: bpos])(fd['time'][0: bpos])
-    spldict['rocspl'] = UniSpl(fd['time'][0: bpos], fd['rocs'][0: bpos])(fd['time'][0: bpos])
-    spldict['galspl'] = UniSpl(fd['time'][0: bpos], fd['gals'][0: bpos])(fd['time'][0: bpos])
-    spldict['hdgspl'] = UniSpl(fd['time'][0: bpos], fd['hdgs'][0: bpos])(fd['time'][0: bpos])
-    spldict['latspl'] = UniSpl(fd['time'][0: bpos], fd['lats'][0: bpos])(fd['time'][0: bpos])
-    spldict['lonspl'] = UniSpl(fd['time'][0: bpos], fd['lons'][0: bpos])(fd['time'][0: bpos])
+    spldict['altspl'] = UniSpl(fd['time'][0: bpos],
+                               fd['alts'][0: bpos])(fd['time'][0: bpos])
+    spldict['spdspl'] = UniSpl(fd['time'][0: bpos],
+                               fd['spds'][0: bpos])(fd['time'][0: bpos])
+    spldict['rocspl'] = UniSpl(fd['time'][0: bpos],
+                               fd['rocs'][0: bpos])(fd['time'][0: bpos])
+    spldict['galspl'] = UniSpl(fd['time'][0: bpos],
+                               fd['gals'][0: bpos])(fd['time'][0: bpos])
+    spldict['hdgspl'] = UniSpl(fd['time'][0: bpos],
+                               fd['hdgs'][0: bpos])(fd['time'][0: bpos])
+    spldict['latspl'] = UniSpl(fd['time'][0: bpos],
+                               fd['lats'][0: bpos])(fd['time'][0: bpos])
+    spldict['lonspl'] = UniSpl(fd['time'][0: bpos],
+                               fd['lons'][0: bpos])(fd['time'][0: bpos])
 
     return spldict
 
 
 def do_labels(fd):
-    '''
-    Perform the fuzzy labelling using Junzi's method.
-    Add an additional force label of aircraft with "onground=True" to
+    """Perform the fuzzy labelling using Junzi's method.
+
+    Add an additional force label of aircraft with 'onground=True' to
     the 'GND' label category.
     Input:
         -   A dict of flight data, such as that returned by preproc_data()
     Returns:
         -   A numpy array containing categorised flight phases.
-    '''
-    labels = flph.fuzzylabels(fd['time'], fd['gals'],
-                              fd['spds'], fd['rocs'], twindow=15)
 
+    """
+    try:
+        labels = flph.fuzzylabels(fd['time'], fd['alts'],
+                                  fd['spds'], fd['rocs'], twindow=15)
+    except Exception as e:
+        print("Error creating spline", e, fd['call'])
+        quit()
     pts = (fd['ongd']).nonzero()
     labels[pts] = 'GND'
 

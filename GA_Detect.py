@@ -1,14 +1,21 @@
+"""A script to process OpenSky ADS-B data in an attempt to detect go-around events at an airport."""
 from traffic.core import Traffic
 from datetime import timedelta
-import metar_parse as MEP
 import multiprocessing as mp
 from OS_Airports import VABB
 import OS_Funcs as OSF
 import glob
 
 
-def main(start_n, fidder):
+def main(start_n, fidder, do_write):
+    """The main code for detecting go-arounds.
 
+    Arguments:
+    start_n -- The index of the first file to read
+    fidder -- the id of an open file to write log information into
+    do_write -- boolean flag specifying whether to output data to textfile
+
+    """
     # Total number of aircraft seen
     tot_n_ac = 0
 
@@ -32,16 +39,28 @@ def main(start_n, fidder):
     odir_da_ga = top_dir + 'OUT_DATA/PSGA/'
 
     odirs = [odir_pl_nm, odir_pl_ga, odir_da_nm, odir_da_ga]
-    
-    # Read METARs from disk
-    metars = MEP.get_metars('/home/proud/Desktop/GoAround_Paper/VABB_METAR')
-    
-    # File to save met info for g/a flights
-    metfid = open('/home/proud/Desktop/GoAround_Paper/GA_MET.csv','w')
-    metfid.write('ICAO24, Callsign, Time, Runway, Temp, Dewp, Wind_Spd,\
-                  Wind_Gust, Wind_Dir,CB, Pressure\n')
 
-    files = glob.glob(indir+'*.pkl')
+    # Output filenames for saving data about go-arounds
+    out_file_ga = 'GA_MET_NEW.csv'
+    # Output filenames for saving data about non-go-arounds
+    out_file_noga = 'GA_NOGA_NEW.csv'
+
+    t_frmt = "%Y/%m/%d %H:%M:%S"
+
+    # File to save met info for g/a flights
+    if (do_write):
+        metfid = open(out_file_ga, 'w')
+        nogfid = open(out_file_noga, 'w')
+        metfid.write('ICAO24, Callsign, GA_Time, L_Time, Runway, Heading, Alt, Lat, \
+                      Lon, gapt, rocvar, hdgvar, latvar, lonvar, gspvar, \
+                      Temp, Dewp, Wind_Spd, Wind_Gust, Wind_Dir,Cld_Base,\
+                      CB, Vis, Pressure\n')
+        nogfid.write('ICAO24, Callsign, GA_Time, L_Time, Runway, gapt, rocvar, \
+                      hdgvar, latvar, lonvar, gspvar, \
+                      Temp, Dewp, Wind_Spd, Wind_Gust, Wind_Dir,Cld_Base,\
+                      CB, Vis, Pressure\n')
+    files = []
+    files = glob.glob(indir+'**.pkl')
     files.sort()
 
     fli_len = len(files)
@@ -52,7 +71,7 @@ def main(start_n, fidder):
     # Number of files to open in one go
     n_files_proc = 55
 
-    pool_proc = 56
+    pool_proc = 100
 
     f_data = []
     pool = mp.Pool(processes=pool_proc)
@@ -81,6 +100,8 @@ def main(start_n, fidder):
         traf_arr = Traffic.from_flights(f_data)
         p_list = []
         f_data = []
+        # Extend array end time if there's only one flight, else processing
+        # will fail as we check to ensure latest flight is > 5 mins from end
         if (len(traf_arr) == 1):
             end_time = traf_arr.end_time + timedelta(minutes=10)
             print("Extending timespan due to single aircraft")
@@ -90,13 +111,13 @@ def main(start_n, fidder):
         # Now we process the results
         for flight in traf_arr:
             if (flight.stop + timedelta(minutes=5) < end_time):
-                p_list.append(pool.apply_async(OSF.proc_fl, args=(flight,
-                                                                  VABB.rwy_list,
-                                                                  odirs,
-                                                                  colormap,
-                                                                  metars,
-                                                                  True,
-                                                                  False,)))
+                p_list.append(pool.apply_async(OSF.proc_fl,
+                                               args=(flight,
+                                                     VABB.rwy_list,
+                                                     odirs,
+                                                     colormap,
+                                                     True,
+                                                     False,)))
             else:
                 f_data.append(flight)
 
@@ -104,23 +125,75 @@ def main(start_n, fidder):
             t_res = p.get()
             if (t_res != -1):
                 tot_n_ac += 1
+                # If there's a go-around, this will be True
                 if (t_res[0]):
-                    metfid.write(t_res[1] + ',' + t_res[2] + ',')
-                    metfid.write(t_res[3].strftime("%Y%m%d%H%M") + ',')
-                    metfid.write(t_res[4] + ',')
-                    metfid.write(str(t_res[5].temp) + ',')
-                    metfid.write(str(t_res[5].dewp) + ',')
-                    metfid.write(str(t_res[5].w_s) + ',')
-                    metfid.write(str(t_res[5].w_g) + ',')
-                    metfid.write(str(t_res[5].w_d) + ',')
-                    metfid.write(str(t_res[5].cb) + ',')
-                    metfid.write(str(t_res[5].vis) + ',')
-                    metfid.write(str(t_res[5].pres) + '\n')
+                    if (do_write):
+                        metfid.write(t_res[1] + ',' + t_res[2] + ',')
+                        metfid.write(t_res[3].strftime(t_frmt) + ',')
+                        metfid.write(t_res[4].strftime(t_frmt) + ',')
+                        metfid.write(t_res[5] + ',')
+                        if (t_res[6] < 0):
+                            t_res[6] = 360 + t_res[6]
+                        metfid.write(str(t_res[6]) + ',')
+                        metfid.write(str(t_res[7]) + ',')
+                        metfid.write(str(t_res[8]) + ',')
+                        metfid.write(str(t_res[9]) + ',')
+                        metfid.write(str(t_res[10]) + ',')
+                        metfid.write(str(t_res[11]) + ',')
+                        metfid.write(str(t_res[12]) + ',')
+                        metfid.write(str(t_res[13]) + ',')
+                        metfid.write(str(t_res[14]) + ',')
+                        metfid.write(str(t_res[15]) + ',')
+                        metfid.write(str(t_res[16].temp) + ',')
+                        metfid.write(str(t_res[16].dewp) + ',')
+                        metfid.write(str(t_res[16].w_s) + ',')
+                        metfid.write(str(t_res[16].w_g) + ',')
+                        metfid.write(str(t_res[16].w_d) + ',')
+                        metfid.write(str(t_res[16].cld) + ',')
+                        if t_res[16].cb:
+                            metfid.write('1,')
+                        else:
+                            metfid.write('0,')
+                        metfid.write(str(t_res[16].vis) + ',')
+                        metfid.write(str(t_res[16].pres) + '\n')
                     tot_n_ga += 1
+                # Otherwise, do the following (doesn't save g/a location etc).
+                else:
+                    if (do_write):
+                        nogfid.write(t_res[1] + ',' + t_res[2] + ',')
+                        nogfid.write(t_res[3].strftime(t_frmt) + ',')
+                        nogfid.write(t_res[4].strftime(t_frmt) + ',')
+                        nogfid.write(t_res[5] + ',')
+                        nogfid.write(str(t_res[10]) + ',')
+                        nogfid.write(str(t_res[11]) + ',')
+                        nogfid.write(str(t_res[12]) + ',')
+                        nogfid.write(str(t_res[13]) + ',')
+                        nogfid.write(str(t_res[14]) + ',')
+                        nogfid.write(str(t_res[15]) + ',')
+                        try:
+                            outstr = str(t_res[16].temp) + ','
+                            outstr = outstr + str(t_res[16].dewp) + ','
+                            outstr = outstr + str(t_res[16].w_s) + ','
+                            outstr = outstr + str(t_res[16].w_g) + ','
+                            outstr = outstr + str(t_res[16].w_d) + ','
+                            outstr = outstr + str(t_res[16].cld) + ','
+                            if t_res[16].cb:
+                                outstr = outstr + '1,'
+                            else:
+                                outstr = outstr + '0,'
+                            outstr = outstr + str(t_res[16].vis) + ','
+                            outstr = outstr + str(t_res[16].pres)
+                        except Exception as e:
+                            print("No METAR data for this flight")
+                            outstr = ''
+                        nogfid.write(outstr + '\n')
+
         print("\t-\tHave processed " + str(tot_n_ac) +
               " aircraft. Have seen " + str(tot_n_ga) + " go-arounds.")
-              
-    metfid.close()
+
+    if (do_write):
+        metfid.close()
+        nogfid.close()
 
 
 # Use this to start processing from a given file number.
@@ -129,6 +202,6 @@ init_num = 0
 
 fid = open('/home/proud/Desktop/log.log', 'w')
 
-main(init_num, fid)
+main(init_num, fid, False)
 
 fid.close()

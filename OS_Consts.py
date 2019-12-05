@@ -1,3 +1,7 @@
+"""Some constants to use during go-around detection.
+
+These may need to be tuned to suit individual airports and/or situations.
+"""
 # The threshold altitude used to determine if a go-around occurred,
 # check if points in a given time window (below) after a state change
 # are above this altitude
@@ -35,7 +39,7 @@ gate_dist = 1. / 112.
 
 # The threshold altitude for the state change, if change occurs above
 # this altitude then it's probably not a go-around
-ga_st_alt_t = 1500.
+ga_st_alt_t = 2500.
 
 
 # This is a list of icao24 addresses to exclude, for example general

@@ -1,8 +1,7 @@
-'''
+"""
 This script downloads data from the opensky library for a particular airport,
 a small perimeter is set up around the airport to catch the approach path
-
-'''
+"""
 
 from datetime import datetime, timedelta
 from traffic.data import opensky
@@ -29,12 +28,12 @@ nummer = 6
 
 
 def get_bounds(rwys):
-    '''
+    """
     This function computes the boundaries of the retrieval
     'box' based upon the runways selected for processing.
     The box is approx. 0.25 degrees in each direction around
     the airport midpoint.
-    '''
+    """
     latlist = []
     lonlist = []
     for rwy in rwys:
@@ -52,12 +51,11 @@ def get_bounds(rwys):
 
 
 def getter(init_time, bounds, timer, anam):
-    '''
+    """
     This function downloads the data, which is done in
     one hour segments. Each hour is downloaded separately
     using multiprocessing for efficiency.
-    '''
-
+    """
     try:
         times = init_time + timedelta(hours=timer)
         dtst = times.strftime("%Y%m%d%H%M")

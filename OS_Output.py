@@ -1,14 +1,19 @@
-from matplotlib.lines import Line2D
-import matplotlib.pyplot as plt
+"""A set of functions to plot and/or save flight trajectory information."""
 import numpy as np
 import os
 
+# This line stops matplotlib messing up in terminal mode
+os.environ['QT_QPA_PLATFORM'] = 'offscreen'
 
-def do_plots(fd, spld, cmap, outdir, app_ylim=True, odpi=300, rwy=None):
-    '''
-    Creates and saves a series of plots showing relevant data for each
-    flight that has been processed. Files are saved in a /YYYMMDD/
-    subdirectory of the 'outdir' argument.
+from matplotlib.lines import Line2D
+import matplotlib.pyplot as plt
+
+
+def do_plots(fd, spld, cmap, outdir, app_ylim=True,
+             odpi=300, rwy=None, bpos=None):
+    """Creates and saves a series of plots showing relevant data for each flight that has been processed.
+
+    Files are saved in a /YYYMMDD/ subdirectory of the 'outdir' argument.
     This version saves data with time since first appearance in the
     datastream on the x-axis.
     Inputs:
@@ -19,37 +24,82 @@ def do_plots(fd, spld, cmap, outdir, app_ylim=True, odpi=300, rwy=None):
         -   (optional) A bool specifying to apply predefined axis limits.
         -   (optional) An int specifying the desired output DPI
         -   (optional) A runway class specifying the landing runway, or None
+        -   (optional) An int specifying the max array position
     Returns:
         -   Nothing
-    '''
-    colors = [cmap[l] for l in fd['labl']]
-    fig, ax = plt.subplots(dpi=400)
+    """
+    if bpos is None:
+        bpos = len(fd['time'])
+
+    colors = [cmap[l] for l in fd['labl'][0:bpos]]
     fs = (20, 20)
     custom_lines = []
     for color in cmap:
         lin = Line2D([0], [0], color=cmap[color], lw=0, marker='.')
         custom_lines.append(lin)
 
-    plt.subplot(311)
-    plt.plot(fd['time'], spld['galspl']/1000., '-', color='k', lw=0.1)
-    plt.scatter(fd['time'], fd['gals']/1000., marker='.', c=colors, lw=0)
+    fig, ax = plt.subplots(dpi=400)
+    fs = (20, 20)
+
+    plt.subplot(411)
+    plt.plot(fd['time'][0:bpos],
+             spld['altspl']/1000.,
+             '-',
+             color='k',
+             lw=0.1)
+    plt.scatter(fd['time'][0:bpos],
+                fd['alts'][0:bpos]/1000.,
+                marker='.',
+                c=colors,
+                lw=0)
     plt.ylabel('altitude (kft)')
     if (app_ylim):
         plt.ylim(-0.5, 10.)
 
-    plt.subplot(312)
-    plt.plot(fd['time'], spld['rocspl']/1000., '-', color='k', lw=0.1)
-    plt.scatter(fd['time'], fd['rocs']/1000., marker='.', c=colors, lw=0)
+    plt.subplot(412)
+    plt.plot(fd['time'][0:bpos],
+             spld['rocspl']/1000.,
+             '-',
+             color='k',
+             lw=0.1)
+    plt.scatter(fd['time'][0:bpos],
+                fd['rocs'][0:bpos]/1000.,
+                marker='.',
+                c=colors,
+                lw=0)
     plt.ylabel('roc (kfpm)')
     if (app_ylim):
-        plt.ylim(-0.5, 10.)
+        plt.ylim(-1.5, 1.5)
 
-    plt.subplot(313)
-    plt.plot(fd['time'], spld['spdspl'], '-', color='k', lw=0.1)
-    plt.scatter(fd['time'], fd['spds'], marker='.', c=colors, lw=0)
+    plt.subplot(413)
+    plt.plot(fd['time'][0:bpos],
+             spld['spdspl'],
+             '-',
+             color='k',
+             lw=0.1)
+    plt.scatter(fd['time'][0:bpos],
+                fd['spds'][0:bpos],
+                marker='.',
+                c=colors,
+                lw=0)
     plt.ylabel('speed (kts)')
     if (app_ylim):
         plt.ylim(0., 400.)
+
+    plt.subplot(414)
+    plt.plot(fd['time'],
+             spld['hdgspl'],
+             '-',
+             color='k',
+             lw=0.1)
+    plt.scatter(fd['time'],
+                fd['hdgs'],
+                marker='.',
+                c=colors,
+                lw=0)
+    plt.ylabel('heading (deg)')
+    if (app_ylim):
+        plt.ylim(-180., 180.)
 
     plt.legend(custom_lines,
                ['Ground', 'Climb', 'Cruise', 'Descent', 'Level', 'N/A'],
@@ -64,8 +114,8 @@ def do_plots(fd, spld, cmap, outdir, app_ylim=True, odpi=300, rwy=None):
     if (not os.path.exists(odir)):
         try:
             os.mkdir(odir)
-        except:
-            None
+        except Exception:
+            pass
 
     timestr = fd['stop'].strftime("%Y%m%d%H%M")
     outf = odir + 'FLT_' + fd['ic24'] + '_'
@@ -76,16 +126,17 @@ def do_plots(fd, spld, cmap, outdir, app_ylim=True, odpi=300, rwy=None):
                 dpi=odpi,
                 bbox_inches='tight',
                 pad_inches=0)
-    plt.close()
+    plt.close(fig)
 
 
 def get_fig_outname(outdir, fd, figtype):
+    """Generates a name for the output figure based on type."""
     odir = outdir + fd['stop'].strftime("%Y%m%d") + '/'
     if (not os.path.exists(odir)):
         try:
             os.mkdir(odir)
-        except:
-            None
+        except Exception:
+            pass
 
     timestr = fd['stop'].strftime("%Y%m%d%H%M")
     outf = odir + 'FLT_' + fd['ic24'] + '_'
@@ -93,17 +144,17 @@ def get_fig_outname(outdir, fd, figtype):
     outf = outf + timestr + '_' + figtype + '.png'
 
     return outf
-    
+
+
 def make_yvals(dists, multis):
-    '''
-    Return a list of y-values associated with a 6th order polynomial
-    and some x values.
+    """Return a list of y-values associated with a 6th order polynomial and some x values.
+
     Inputs:
         -   dists: List of x axis coords
         -   multis: Polynomial coefficientsd
     Returns:
         -   A list of y values
-    '''
+    """
     yvals = (np.power(dists, 6) * multis[0] +
              np.power(dists, 5) * multis[1] +
              np.power(dists, 4) * multis[2] +
@@ -114,12 +165,13 @@ def make_yvals(dists, multis):
 
     return yvals
 
+
 def do_plots_dist(fd, spld, cmap, outdir,
-                  app_xlim=True, app_ylim=True, odpi=300, rwy=None, bpos = None):
-    '''
-    Creates and saves a series of plots showing relevant data for each
-    flight that has been processed. Files are saved in a /YYYMMDD/
-    subdirectory of the 'outdir' argument.
+                  app_xlim=True, app_ylim=False,
+                  odpi=300, rwy=None, bpos=None):
+    """Creates and saves a series of plots showing relevant data for each flight that has been processed.
+
+    Files are saved in a /YYYMMDD/ subdirectory of the 'outdir' argument.
     This version saves data with distance to detected landing runway on the
     x-axis.
     Inputs:
@@ -134,9 +186,8 @@ def do_plots_dist(fd, spld, cmap, outdir,
         -   (optional) An int specifying the max array position
     Returns:
         -   Nothing
-    '''
-
-    if (bpos == None):
+    """
+    if bpos is None:
         bpos = len(fd['time'])
 
     xlims = [-10., 0.1]
@@ -146,15 +197,14 @@ def do_plots_dist(fd, spld, cmap, outdir,
     else:
         hme = np.nanmean(fd['hdgs'])
         hdglim = [hme - 5, hme + 5]
-    
+
     colors = [cmap[l] for l in fd['labl'][0:bpos]]
     fs = (20, 20)
     custom_lines = []
     for color in cmap:
         lin = Line2D([0], [0], color=cmap[color], lw=0, marker='.')
         custom_lines.append(lin)
-    
-    
+
     tmprd = np.copy(fd['rdis'])
     pts = (tmprd < xlims[0]).nonzero()
     tmprd[pts] = np.nan
@@ -162,8 +212,11 @@ def do_plots_dist(fd, spld, cmap, outdir,
     tmprd[pts] = np.nan
     pts = (tmprd == tmprd).nonzero()
 
-#    plt.plot(fd['rdis'], spld['altspl']/1000., '-', color='k', lw=0.1)
-    plt.scatter(fd['rdis'][0:bpos], fd['alts'][0:bpos]/1000., marker='.', c=colors, lw=0)
+    plt.scatter(fd['rdis'][0:bpos],
+                fd['alts'][0:bpos]/1000.,
+                marker='.',
+                c=colors,
+                lw=0)
     if (rwy is not None):
         yvals1 = make_yvals(distlist, rwy.alts1)
         yvalm = make_yvals(distlist, rwy.altm)
@@ -183,7 +236,6 @@ def do_plots_dist(fd, spld, cmap, outdir,
     plt.legend(custom_lines,
                ['Ground', 'Climb', 'Cruise', 'Descent', 'Level', 'N/A'],
                loc='best',
-               #bbox_to_anchor=(0.5, -0.01),
                ncol=6,
                fancybox=False,
                mode="expand")
@@ -192,8 +244,11 @@ def do_plots_dist(fd, spld, cmap, outdir,
     plt.savefig(outf, figsize=fs, dpi=odpi, bbox_inches='tight', pad_inches=0)
     plt.clf()
 
-#    plt.plot(fd['rdis'], spld['rocspl']/1000., '-', color='k', lw=0.1)
-    plt.scatter(fd['rdis'][0:bpos], fd['rocs'][0:bpos]/1000., marker='.', c=colors, lw=0)
+    plt.scatter(fd['rdis'][0:bpos],
+                fd['rocs'][0:bpos]/1000.,
+                marker='.',
+                c=colors,
+                lw=0)
     if (rwy is not None):
         yvals1 = make_yvals(distlist, rwy.rocs1)
         yvalm = make_yvals(distlist, rwy.rocm)
@@ -213,7 +268,6 @@ def do_plots_dist(fd, spld, cmap, outdir,
     plt.legend(custom_lines,
                ['Ground', 'Climb', 'Cruise', 'Descent', 'Level', 'N/A'],
                loc='best',
-               #bbox_to_anchor=(0.5, -0.01),
                ncol=6,
                fancybox=False,
                mode="expand")
@@ -222,8 +276,11 @@ def do_plots_dist(fd, spld, cmap, outdir,
     plt.savefig(outf, figsize=fs, dpi=odpi, bbox_inches='tight', pad_inches=0)
     plt.clf()
 
-#    plt.plot(fd['rdis'], spld['spdspl'], '-', color='k', lw=0.1)
-    plt.scatter(fd['rdis'][0:bpos], fd['spds'][0:bpos], marker='.', c=colors, lw=0)
+    plt.scatter(fd['rdis'][0:bpos],
+                fd['spds'][0:bpos],
+                marker='.',
+                c=colors,
+                lw=0)
     plt.ylabel('Ground Speed (kts)')
     plt.xlabel('Distance to Runway (km)')
     if (app_xlim):
@@ -236,7 +293,6 @@ def do_plots_dist(fd, spld, cmap, outdir,
     plt.legend(custom_lines,
                ['Ground', 'Climb', 'Cruise', 'Descent', 'Level', 'N/A'],
                loc='best',
-               #bbox_to_anchor=(0.5, -0.01),
                ncol=6,
                fancybox=False,
                mode="expand")
@@ -245,8 +301,11 @@ def do_plots_dist(fd, spld, cmap, outdir,
     plt.savefig(outf, figsize=fs, dpi=odpi, bbox_inches='tight', pad_inches=0)
     plt.clf()
 
-#    plt.plot(fd['rdis'], spld['hdgspl'], '-', color='k', lw=0.1)
-    plt.scatter(fd['rdis'][0:bpos], fd['hdgs'][0:bpos], marker='.', c=colors, lw=0)
+    plt.scatter(fd['rdis'][0:bpos],
+                fd['hdgs'][0:bpos],
+                marker='.',
+                c=colors,
+                lw=0)
     if (rwy is not None):
         yvals1 = make_yvals(distlist, rwy.hdgs1)
         yvalm = make_yvals(distlist, rwy.hdgm)
@@ -266,7 +325,6 @@ def do_plots_dist(fd, spld, cmap, outdir,
     plt.legend(custom_lines,
                ['Ground', 'Climb', 'Cruise', 'Descent', 'Level', 'N/A'],
                loc='best',
-               #bbox_to_anchor=(0.5, -0.01),
                ncol=6,
                fancybox=False,
                mode="expand")
@@ -275,8 +333,11 @@ def do_plots_dist(fd, spld, cmap, outdir,
     plt.savefig(outf, figsize=fs, dpi=odpi, bbox_inches='tight', pad_inches=0)
     plt.clf()
 
-#    plt.plot(fd['rdis'], spld['lonspl'], '-', color='k', lw=0.1)
-    plt.scatter(fd['rdis'][0:bpos], fd['lons'][0:bpos], marker='.', c=colors, lw=0)
+    plt.scatter(fd['rdis'][0:bpos],
+                fd['lons'][0:bpos],
+                marker='.',
+                c=colors,
+                lw=0)
     if (rwy is not None):
         yvals1 = make_yvals(distlist, rwy.lons1)
         yvalm = make_yvals(distlist, rwy.lonm)
@@ -295,7 +356,6 @@ def do_plots_dist(fd, spld, cmap, outdir,
     plt.legend(custom_lines,
                ['Ground', 'Climb', 'Cruise', 'Descent', 'Level', 'N/A'],
                loc='best',
-               #bbox_to_anchor=(0.5, -0.01),
                ncol=6,
                fancybox=False,
                mode="expand")
@@ -304,8 +364,11 @@ def do_plots_dist(fd, spld, cmap, outdir,
     plt.savefig(outf, figsize=fs, dpi=odpi, bbox_inches='tight', pad_inches=0)
     plt.clf()
 
-#    plt.plot(fd['rdis'], spld['latspl'], '-', color='k', lw=0.1)
-    plt.scatter(fd['rdis'][0:bpos], fd['lats'][0:bpos], marker='.', c=colors, lw=0)
+    plt.scatter(fd['rdis'][0:bpos],
+                fd['lats'][0:bpos],
+                marker='.',
+                c=colors,
+                lw=0)
     if (rwy is not None):
         yvals1 = make_yvals(distlist, rwy.lats1)
         yvalm = make_yvals(distlist, rwy.latm)
@@ -324,7 +387,6 @@ def do_plots_dist(fd, spld, cmap, outdir,
     plt.legend(custom_lines,
                ['Ground', 'Climb', 'Cruise', 'Descent', 'Level', 'N/A'],
                loc='best',
-               #bbox_to_anchor=(0.5, -0.01),
                ncol=6,
                fancybox=False,
                mode="expand")
@@ -335,21 +397,21 @@ def do_plots_dist(fd, spld, cmap, outdir,
 
 
 def to_numpy(fd, outdir):
-    '''
-    Save data for a single flight into a numpy pickle file.
+    """Save data for a single flight into a numpy pickle file.
+
     Files are saved in a YYYYMMDD subdirectory.
     Inputs:
         -   fd: Dict containing flight info
         -   outdir: Location to store output
     Returns:
         -   Nothing
-    '''
+    """
     odir = outdir + fd['stop'].strftime("%Y%m%d") + '/'
     if (not os.path.exists(odir)):
         try:
             os.mkdir(odir)
-        except:
-            None
+        except Exception:
+            pass
     outf = odir + 'FLT_' + fd['ic24'] + '_'
     outf = outf + fd['call'] + '_'
     outf = outf + fd['stop'].strftime("%Y%m%d%H%m") + '.pkl'
