@@ -22,6 +22,17 @@ The airport region to retrieve data for is specified with the `--airport` option
 
 The border region around the airport is manually specified (as `0.45 deg`) in `get_bounds()`. You may wish to change this.
 
+Running the script without parameters defaults to downloading data for
+the ``VABB`` airport between 2019-08-10 and 2019-08-21 and saving that
+data into the `INDATA` directory in your working directory.  Thus,
+these two calls are equivalent:
+
+```bash
+python OpenSky_Get_Data.py  # does the same thing as the next command:
+python OpenSky_Get_Data.py \
+    --airport=VABB --start-dt=2019-08-10 --end-dt=2019-08-21 \
+    --outdir=INDATA --n-jobs=1
+```
 
 ### In `GA_Detect.py`
 The directory structure is set at the beginning of `main()`. You will probably want to adjust this to your own requirements.

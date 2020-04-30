@@ -61,7 +61,6 @@ def getter(init_time, bounds, timer, anam, outdir):
                                   bounds=bounds,
                                   other_params=" and time-lastcontact<=15 ")
         flights.to_pickle(outf)
-        print("Wrote", outf)
     except Exception as e:
         print("There is a problem with this date/time combination:", e, times)
 
