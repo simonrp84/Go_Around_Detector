@@ -10,18 +10,29 @@ Requires:
 
 Usage:
 First you must download aircraft data, which can be done using the `OpenSky_Get_Data` script. You can then point `GA_Detect` at the download location to scan for go-arounds.
-This tool is in very early development, so has many manual tweaks that would ideally be changeable via a config file or directly via the command line call. The most important of these tweaks are listed below:
+This tool is in very early development, so has manual tweaks that would ideally be changeable via a config file or directly via the command line call. The most important of these tweaks are listed below:
 
-### In `OpenSky_Get_Data.py`:
+### `OpenSky_Get_Data.py`:
 
-`outdir`, the output directory, must be manually set in the script
+Use the script's `--outdir` option so the the output directory. This defaults to `INDATA` in your current working directory.
 
-`nummer` specifies the number of concurrent retrievals from the OpenSky database. I have found that six works well, but this may be different for you.
+Use `--n-jobs` to specify the number of concurrent retrievals from the OpenSky database. I have found that six works well, but this may be different for you.
 
-The airport region to retrieve data for is specified with the import line: `import airport.VABB as AIRPRT`, which will import Mumbai airport (VABB). You should create your own airport definition in the `./airports` directory.
+The airport region to retrieve data for is specified with the `--airport` option.  The default is `VABB`, which will import Mumbai airport (VABB). You should create your own airport definition in the `./airports` directory.
 
 The border region around the airport is manually specified (as `0.45 deg`) in `get_bounds()`. You may wish to change this.
 
+Running the script without parameters defaults to downloading data for
+the ``VABB`` airport between 2019-08-10 and 2019-08-21 and saving that
+data into the `INDATA` directory in your working directory.  Thus,
+these two calls are equivalent:
+
+```bash
+python OpenSky_Get_Data.py  # does the same thing as the next command:
+python OpenSky_Get_Data.py \
+    --airport=VABB --start-dt=2019-08-10 --end-dt=2019-08-21 \
+    --outdir=INDATA --n-jobs=1
+```
 
 ### In `GA_Detect.py`
 The directory structure is set at the beginning of `main()`. You will probably want to adjust this to your own requirements.
