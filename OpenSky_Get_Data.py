@@ -1,16 +1,18 @@
-"""
+"""Download data from Opensky.
+
 This script downloads data from the opensky library for a particular airport,
 a small perimeter is set up around the airport to catch the approach path
 """
 
 from datetime import datetime, timedelta, timezone
 from importlib import import_module
+from traffic.data import opensky
 import multiprocessing as mp
+import numpy as np
+import pathlib
+import click
 import os
 
-import click
-import numpy as np
-from traffic.data import opensky
 
 # Use these lines if you need debug info
 # from traffic.core.logging import loglevel
@@ -18,7 +20,8 @@ from traffic.data import opensky
 
 
 def get_bounds(rwys):
-    """
+    """Get bounding box for the airport.
+
     This function computes the boundaries of the retrieval
     'box' based upon the runways selected for processing.
     The box is approx. 0.25 degrees in each direction around
@@ -40,16 +43,23 @@ def get_bounds(rwys):
     return bounds
 
 
-def getter(init_time, bounds, timer, anam, outdir):
-    """
-    This function downloads the data, which is done in
-    one hour segments. Each hour is downloaded separately
-    using multiprocessing for efficiency.
+def getter(init_time, bounds, timer, anam, outdir, subdir):
+    """Get data from the opensky server.
+
+    This is done in one hour segments. Each hour is downloaded
+    separately using multiprocessing for efficiency.
     """
     try:
         times = init_time + timedelta(hours=timer)
         dtst = times.strftime("%Y%m%d%H%M")
-        outf = outdir+'OS_'+dtst+'_'+anam+'.pkl'
+        # Check if we're saving into YYYMMDD subdirectories,
+        # create directories if necessary
+        if subdir is True:
+            odir = outdir + times.strftime("%Y%m%d") + '/'
+        else:
+            odir = outdir
+        pathlib.Path(odir).mkdir(parents=True, exist_ok=True)
+        outf = odir + 'OS_' + dtst + '_' + anam + '.pkl'
 
         # Check if the file has already been retrieved
         if (os.path.exists(outf)):
@@ -72,9 +82,10 @@ def getter(init_time, bounds, timer, anam, outdir):
 @click.option('--start-dt', default='2019-08-10')
 @click.option('--end-dt', default='2019-08-21')
 @click.option('--outdir', default='INDATA/')
+@click.option('--subdir', default=True)
 @click.option('--n-jobs', default=1)
-def main(airport, start_dt, end_dt, outdir, n_jobs):
-    os.makedirs(outdir, exist_ok=True)
+def main(airport, start_dt, end_dt, outdir, subdir, n_jobs):
+    """Set up the processing and run."""
     airport = import_module('OS_Airports.' + airport)
     bounds = get_bounds(airport.rwy_list)
     start_dt = datetime.strptime(start_dt, '%Y-%m-%d').replace(
@@ -86,7 +97,7 @@ def main(airport, start_dt, end_dt, outdir, n_jobs):
     pool = mp.Pool(n_jobs)
 
     pool.starmap(getter, [
-        (start_dt, bounds, hour, airport.icao_name, outdir)
+        (start_dt, bounds, hour, airport.icao_name, outdir, subdir)
         for hour in range(hours)
         ])
 
